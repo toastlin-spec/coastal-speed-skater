@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Coastal Speed Skater - Sky & Tunnel</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.5); pointer-events: auto; backdrop-filter: blur(4px); transition: opacity 0.3s; }
+        .hidden { opacity: 0; pointer-events: none !important; }
+
+        h1 { color: #fff; font-size: 3rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.7); text-align: center; margin-bottom: 10px; }
+        h2 { color: #FFD700; font-size: 1.5rem; margin-bottom: 30px; text-shadow: 1px 1px 2px rgba(0,0,0,0.7); text-align: center; }
+        .btn { background: #1E90FF; color: white; border: 2px solid #fff; padding: 15px 40px; font-size: 1.5rem; font-weight: bold; border-radius: 30px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.4); transition: transform 0.1s, background 0.2s; pointer-events: auto; margin: 10px; }
+        .btn:active { transform: scale(0.95); background: #0073e6; }
+
+        .stats-box { background: rgba(255,255,255,0.95); padding: 20px 40px; border-radius: 15px; text-align: center; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 3px solid #1E90FF; }
+        .stats-box p { margin: 10px 0; font-size: 1.2rem; font-weight: bold; color: #333; }
+        .stats-box span { color: #FF4500; font-size: 1.5rem; }
+        @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .hud-top { display: flex; justify-content: space-between; padding: 15px 20px; text-shadow: 1px 1px 3px rgba(0,0,0,0.9); }
+        .hud-text { color: white; font-weight: bold; font-size: 1.2rem; display: flex; flex-direction: column; align-items: center; }
+        .hud-value { font-size: 1.8rem; color: #FFD700; }
+        #speed-val { color: #00FFFF; }
+
+        #combo-display { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); font-size: 3.5rem; color: #FF4500; font-weight: bold; text-shadow: 2px 2px 0 #FFF, -2px -2px 0 #FFF, 2px -2px 0 #FFF, -2px 2px 0 #FFF; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; }
+        .combo-active { opacity: 1 !important; transform: translate(-50%, -20px) scale(1.2) !important; }
+
+        #zone-banner { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); font-size: 2.4rem; font-weight: bold; color: #fff; text-shadow: 0 0 12px #00BFFF, 2px 2px 0 #000; opacity: 0; transition: opacity 0.4s; white-space: nowrap; pointer-events: none; }
+        #zone-banner.zone-show { opacity: 1; }
+
+        .floating-text { position: absolute; color: #FFD700; font-weight: bold; font-size: 1.8rem; text-shadow: 2px 2px 2px #000; pointer-events: none; animation: floatUp 1s forwards; }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-60px) scale(1.2); } }
+
+        #virtual-controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; pointer-events: none; }
+        .v-btn-group { display: flex; gap: 10px; }
+        .v-btn { width: 55px; height: 55px; background: rgba(0,0,0,0.3); border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 1.5rem; color: white; pointer-events: auto; border: 2px solid rgba(255,255,255,0.6); backdrop-filter: blur(2px); }
+        .v-btn:active { background: rgba(255,255,255,0.5); }
+
+        #powerup-ui { position: absolute; bottom: 90px; right: 20px; display: flex; flex-direction: column; gap: 10px; text-align: right; font-weight: bold; font-size: 1.3rem; text-shadow: 1px 1px 3px #000; }
+        .shield-text { color: #00FFFF; }
+        .magnet-text { color: #FF3366; }
+        .star-text { color: #FFD700; text-shadow: 0 0 5px #FFA500; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="ui-layer">
+        <div id="hud" class="hidden">
+            <div class="hud-top">
+                <div class="hud-text">DISTANCE<span id="dist-val" class="hud-value">0 m</span></div>
+                <div class="hud-text">SCORE<span id="score-val" class="hud-value">0</span></div>
+                <div class="hud-text">SPEED<span id="speed-val" class="hud-value">20 km/h</span></div>
+            </div>
+            <div class="hud-top" style="padding-top: 0;">
+                <div class="hud-text" style="align-items: flex-start;">🪙 <span id="coin-val">0</span></div>
+                <button id="pause-btn" class="btn" style="padding: 5px 15px; font-size: 1rem; margin:0; background:rgba(0,0,0,0.5);">❚❚</button>
+            </div>
+            <div id="combo-display">COMBO x2</div>
+            <div id="zone-banner"></div>
+            <div id="powerup-ui">
+                <div id="star-ui" class="star-text"></div>
+                <div id="shield-ui" class="shield-text"></div>
+                <div id="magnet-ui" class="magnet-text"></div>
+            </div>
+
+            <div id="virtual-controls">
+                <div class="v-btn-group">
+                    <div class="v-btn" id="btn-left">←</div>
+                    <div class="v-btn" id="btn-right">→</div>
+                </div>
+                <div class="v-btn-group">
+                    <div class="v-btn" id="btn-up">↑</div>
+                    <div class="v-btn" id="btn-down">↓</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="start-screen" class="screen">
+            <h1>URBAN & COASTAL<br>SPEED SKATER</h1>
+            <h2>四車道 + 天空步道 + 地下道</h2>
+            <button id="start-btn" class="btn">Start Game</button>
+            <p style="color:white; margin-top:20px; font-size:1rem; text-shadow: 1px 1px 2px #000; text-align:center;">
+                ☁ 天空步道：閃避飛機（跳過）與海鷗（滑過）！<br>🚇 地下道：三車道金幣與道具大放送！<br>收集⭐無敵星星可撞碎障礙物！<br><br>
+                手機: 左右上下滑動 (Swipe)<br>電腦: 方向鍵 / 空白鍵跳躍
+            </p>
+        </div>
+
+        <div id="gameover-screen" class="screen hidden">
+            <h1 style="color: #FF4500;">GAME OVER</h1>
+            <div class="stats-box">
+                <p id="new-best-text" style="color:#FF4500; display:none; animation: pulse 1s infinite;">★ NEW BEST SCORE ★</p>
+                <p>Distance: <span id="end-dist">0 m</span></p>
+                <p>Score: <span id="end-score">0</span></p>
+                <p>Coins: <span id="end-coins">0</span></p>
+                <p>Best Score: <span id="end-best">0</span></p>
+            </div>
+            <button id="restart-btn" class="btn">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        /* =========================================================
+           一、遊戲狀態與全域變數
+           ========================================================= */
+        const state = {
+            isPlaying: false, isPaused: false,
+            distance: 0, score: 0, coins: 0, speed: 20, baseSpeed: 0.6,
+            lane: 1, combo: 0, comboTimer: 0,
+            bestScore: localStorage.getItem('urbanBestScore') || 0,
+            shieldTime: 0, magnetTime: 0, starTime: 0
+        };
+
+        // 地面 / 天空：四條跑道 (-3.75, -1.25, 1.25, 3.75)；地下道：三條跑道 (-2.5, 0, 2.5)
+        const LANE_WIDTH = 2.5;
+        const LANE_COUNT = 4;
+        const LANES = Array.from({ length: LANE_COUNT }, (_, i) => (i - (LANE_COUNT - 1) / 2) * LANE_WIDTH);
+        const LANE_IDS = LANES.map((_, i) => i);
+        const TUNNEL_LANES = [-LANE_WIDTH, 0, LANE_WIDTH];
+        const ROAD_HALF = (LANE_WIDTH * LANE_COUNT + 2) / 2;
+        const START_LANE = 1;
+        const JUMP_VELOCITY = 12;
+        const GRAVITY = 32;
+
+        // 區段 (Zone) 設定
+        const SPAWN_Z = -220;
+        const SKY_Y = 10;            // 天空步道高度
+        const SEG = 20;              // 步道 / 隧道每節長度
+        const RAMP_L = 40;           // 上下坡道長度
+        const PORTAL_D = 3;          // 隧道口厚度
+        const TUNNEL_HALF = 4.6;     // 隧道內寬一半
+        const TUNNEL_H = 7;          // 隧道高度
+        const SKY_SEGMENTS = 30;     // 約 165 m
+        const TUNNEL_SEGMENTS = 22;  // 約 120 m
+        const SKY_COLOR = new THREE.Color(0x7EC0EE), TUNNEL_COLOR = new THREE.Color(0x14141c);
+
+        let scene, camera, renderer, ambientLight, hemiLight, dirLight;
+        let player, playerModel;
+        let ground, sceneryObjs = [];
+        let obstacles = [], coins = [], powerups = [], structures = [];
+        let activeLanes = LANES;
+        const clock = new THREE.Clock();
+        const hurtBox = new THREE.Box3(), collectBox = new THREE.Box3();
+
+        const pState = { yVelocity: 0, isJumping: false, isSliding: false, slideTimer: 0, targetX: LANES[START_LANE], currentFloorY: 0, levelY: 0 };
+        let zone;
+
+        /* =========================================================
+           二、音效系統
+           ========================================================= */
+        let audioCtx;
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        function playSound(type) {
+            if (!audioCtx || audioCtx.state === 'suspended') return;
+            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            if (type === 'coin') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(880, now); osc.frequency.exponentialRampToValueAtTime(1760, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'jump') {
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(400, now); osc.frequency.exponentialRampToValueAtTime(200, now + 0.2);
+                gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.2);
+                osc.start(now); osc.stop(now + 0.2);
+            } else if (type === 'crash') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, now); osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
+                gain.gain.setValueAtTime(0.5, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'powerup') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(880, now + 0.2);
+                gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
+            } else if (type === 'zone') {
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(523, now); osc.frequency.setValueAtTime(659, now + 0.12); osc.frequency.setValueAtTime(784, now + 0.24);
+                gain.gain.setValueAtTime(0.25, now); gain.gain.linearRampToValueAtTime(0, now + 0.45);
+                osc.start(now); osc.stop(now + 0.45);
+            }
+        }
+
+        /* =========================================================
+           三、建立模型與場景
+           ========================================================= */
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = SKY_COLOR.clone();
+            scene.fog = new THREE.Fog(SKY_COLOR.getHex(), 40, 160);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / Math.max(1, window.innerHeight), 0.1, 400);
+            camera.position.set(0, 5, 9);
+            camera.lookAt(0, 1, -15);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.35); scene.add(ambientLight);
+            hemiLight = new THREE.HemisphereLight(0xcfe8ff, 0x4c7a3a, 0.55); scene.add(hemiLight);
+            dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            dirLight.position.set(20, 50, 20); dirLight.castShadow = true;
+            dirLight.shadow.mapSize.set(2048, 2048);
+            dirLight.shadow.camera.near = 0.5; dirLight.shadow.camera.far = 150;
+            dirLight.shadow.camera.left = -20; dirLight.shadow.camera.right = 20;
+            dirLight.shadow.camera.top = 30; dirLight.shadow.camera.bottom = -30;
+            scene.add(dirLight);
+
+            createWorld();
+            createPlayer();
+            initObjectPools();
+            resetZone();
+            setupInputs();
+
+            window.addEventListener('resize', onWindowResize, false);
+            animate();
+        }
+
+        function createWorld() {
+            const roadGeo = new THREE.PlaneGeometry(ROAD_HALF * 2, 400);
+            const roadMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+            ground = new THREE.Mesh(roadGeo, roadMat);
+            ground.rotation.x = -Math.PI / 2; ground.position.z = -100;
+            ground.receiveShadow = true; scene.add(ground);
+
+            // 跑道分隔線：4 條跑道 → 3 條線
+            const lineGeo = new THREE.PlaneGeometry(0.1, 400);
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            for (let i = 1; i < LANE_COUNT; i++) {
+                const line = new THREE.Mesh(lineGeo, lineMat);
+                line.rotation.x = -Math.PI / 2;
+                line.position.set((LANES[i - 1] + LANES[i]) / 2, 0.02, -100);
+                scene.add(line);
+            }
+
+            // 路緣石
+            const curbGeo = new THREE.BoxGeometry(0.3, 0.15, 400);
+            const curbMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.9 });
+            for (const side of [-1, 1]) {
+                const curb = new THREE.Mesh(curbGeo, curbMat);
+                curb.position.set(side * (ROAD_HALF + 0.15), 0.075, -100); curb.receiveShadow = true;
+                scene.add(curb);
+            }
+
+            const grassGeo = new THREE.PlaneGeometry(100, 400);
+            const grassMat = new THREE.MeshStandardMaterial({ color: 0x4CAF50 });
+            const leftGrass = new THREE.Mesh(grassGeo, grassMat); leftGrass.rotation.x = -Math.PI / 2; leftGrass.position.set(-ROAD_HALF - 50, -0.1, -100); leftGrass.receiveShadow = true; scene.add(leftGrass);
+            const rightGrass = new THREE.Mesh(grassGeo, grassMat); rightGrass.rotation.x = -Math.PI / 2; rightGrass.position.set(ROAD_HALF + 50, -0.1, -100); rightGrass.receiveShadow = true; scene.add(rightGrass);
+        }
+
+        function createPlayer() {
+            player = new THREE.Group();
+            playerModel = createSkaterModel(SKATER_PALETTES.player);
+            player.add(playerModel);
+
+            const shieldGeo = new THREE.SphereGeometry(1.2, 16, 16);
+            const shieldMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.4, wireframe: true });
+            player.shield = new THREE.Mesh(shieldGeo, shieldMat);
+            player.shield.position.y = 1; player.shield.visible = false;
+            player.add(player.shield);
+
+            const magGeo = new THREE.TorusGeometry(1.5, 0.1, 8, 24);
+            const magMat = new THREE.MeshBasicMaterial({ color: 0xFF3366, transparent: true, opacity: 0.6 });
+            player.magnetRing = new THREE.Mesh(magGeo, magMat);
+            player.magnetRing.rotation.x = Math.PI/2; player.magnetRing.position.y = 0.5; player.magnetRing.visible = false;
+            player.add(player.magnetRing);
+
+            const starAuraGeo = new THREE.IcosahedronGeometry(1.4, 0);
+            const starAuraMat = new THREE.MeshBasicMaterial({ color: 0xFFD700, wireframe: true, transparent: true, opacity: 0.8 });
+            player.starAura = new THREE.Mesh(starAuraGeo, starAuraMat);
+            player.starAura.position.y = 1; player.starAura.visible = false;
+            player.add(player.starAura);
+
+            player.position.set(LANES[START_LANE], 0, 0);
+            scene.add(player);
+        }
+
+        /* ---------- 共用：材質 / 幾何快取與組裝小工具 ---------- */
+        const _matCache = {}, _geoCache = {};
+        function M(color, extra) {
+            const key = color + (extra ? JSON.stringify(extra) : '');
+            if (!_matCache[key]) _matCache[key] = new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.6, metalness: 0.05 }, extra || {}));
+            return _matCache[key];
+        }
+        function GEO(key, make) { return _geoCache[key] || (_geoCache[key] = make()); }
+        // 以頂端為樞紐的肢體 (旋轉時以關節為中心)
+        function limbGeo(len, rt, rb) { return GEO(`limb${len}_${rt}_${rb}`, () => { const g = new THREE.CylinderGeometry(rt, rb, len, 12); g.translate(0, -len / 2, 0); return g; }); }
+        function sph(r) { return GEO('s' + r, () => new THREE.SphereGeometry(r, 16, 12)); }
+        function box(w, h, d) { return GEO(`b${w}_${h}_${d}`, () => new THREE.BoxGeometry(w, h, d)); }
+        function cyl(rt, rb, h) { return GEO(`c${rt}_${rb}_${h}`, () => new THREE.CylinderGeometry(rt, rb, h, 16)); }
+        function add(parent, geo, mat, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) {
+            const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+        }
+        function addNS(...args) { const m = add(...args); m.castShadow = false; return m; }
+        function joint(parent, x, y, z) { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; }
+        function makeSign(text, w, h, bg, fg) {
+            const c = document.createElement('canvas'); c.width = 512; c.height = Math.round(512 * h / w);
+            const g = c.getContext('2d');
+            g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
+            g.strokeStyle = fg; g.lineWidth = 10; g.strokeRect(6, 6, c.width - 12, c.height - 12);
+            g.fillStyle = fg; g.font = `bold ${Math.round(c.height * 0.42)}px "Segoe UI", "Microsoft JhengHei", sans-serif`;
+            g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, c.width / 2, c.height / 2 + 4);
+            return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }));
+        }
+
+        /* ---------- 精緻溜冰手模型 (骨架式階層：髖 → 脊椎 → 頭 / 肩 → 肘 → 手 / 髖 → 膝 → 踝 → 直排輪) ---------- */
+        const SKATER_PALETTES = {
+            player: { jacket: 0x1E90FF, accent: 0xFFD400, pants: 0x1b2238, helmet: 0xffffff, stripe: 0x1E90FF, skin: 0xf1c27d, glove: 0x222222, boot: 0xf5f5f5, wheel: 0x00e5ff, hair: 0x3b2314, pack: 0xFF5722 },
+            rivals: [
+                { jacket: 0x8A2BE2, accent: 0x00FF99, pants: 0x111111, helmet: 0x222222, stripe: 0x8A2BE2, skin: 0xe0ac69, glove: 0x111111, boot: 0x333333, wheel: 0xff00cc, hair: 0x111111, pack: 0x444444 },
+                { jacket: 0xE53935, accent: 0xffffff, pants: 0x263238, helmet: 0xE53935, stripe: 0xffffff, skin: 0xffdbac, glove: 0x333333, boot: 0x222222, wheel: 0xffeb3b, hair: 0xd4a017, pack: 0x37474F },
+                { jacket: 0x2E7D32, accent: 0xFF9800, pants: 0x3e2723, helmet: 0xFF9800, stripe: 0x2E7D32, skin: 0x8d5524, glove: 0x1b1b1b, boot: 0xeeeeee, wheel: 0x76ff03, hair: 0x1a1a1a, pack: 0x5D4037 }
+            ]
+        };
+
+        function createSkaterModel(p) {
+            const root = new THREE.Group();
+            const rig = joint(root, 0, 0, 0);
+            const hips = joint(rig, 0, 1.02, 0);
+
+            const mJ = M(p.jacket), mA = M(p.accent), mP = M(p.pants, { roughness: 0.85 }), mSkin = M(p.skin, { roughness: 0.75 });
+            const mG = M(p.glove, { roughness: 0.9 }), mH = M(p.helmet, { roughness: 0.25, metalness: 0.1 }), mHS = M(p.stripe, { roughness: 0.25 });
+            const mBoot = M(p.boot, { roughness: 0.35 }), mFrame = M(0x9a9a9a, { metalness: 0.85, roughness: 0.3 });
+            const mW = M(p.wheel, { emissive: p.wheel, emissiveIntensity: 0.35 }), mDark = M(0x222222, { roughness: 0.8 });
+            const mVisor = M(0x0b1622, { metalness: 0.9, roughness: 0.08, side: THREE.DoubleSide });
+            const mMetal = M(0xd0d0d0, { metalness: 0.9, roughness: 0.2 });
+
+            // 骨盆 + 皮帶
+            add(hips, sph(0.2), mP, 0, 0, 0, 1, 0.7, 0.75);
+            add(hips, cyl(0.19, 0.19, 0.05), mDark, 0, 0.07, 0, 1, 1, 0.78);
+            add(hips, box(0.07, 0.045, 0.02), mMetal, 0, 0.07, -0.15);
+
+            // 軀幹 (正面朝 -z)
+            const spine = joint(hips, 0, 0.06, 0);
+            add(spine, cyl(0.22, 0.18, 0.46), mJ, 0, 0.23, 0, 1, 1, 0.72);
+            add(spine, sph(0.22), mJ, 0, 0.44, 0, 1, 0.45, 0.72);
+            add(spine, box(0.03, 0.44, 0.02), mA, 0, 0.24, -0.158);            // 拉鍊
+            add(spine, box(0.025, 0.36, 0.06), mA, -0.2, 0.24, 0);             // 側邊條紋
+            add(spine, box(0.025, 0.36, 0.06), mA, 0.2, 0.24, 0);
+            const collar = add(spine, GEO('collar', () => new THREE.TorusGeometry(0.085, 0.03, 8, 16)), mA, 0, 0.53, 0);
+            collar.rotation.x = Math.PI / 2;
+            // 背包 + 肩帶
+            add(spine, box(0.3, 0.34, 0.14), M(p.pack), 0, 0.27, 0.19);
+            add(spine, box(0.22, 0.12, 0.04), mA, 0, 0.17, 0.27);
+            add(spine, box(0.045, 0.4, 0.02), mDark, -0.1, 0.27, -0.152);
+            add(spine, box(0.045, 0.4, 0.02), mDark, 0.1, 0.27, -0.152);
+            // 脖子
+            add(spine, cyl(0.06, 0.065, 0.1), mSkin, 0, 0.56, 0);
+
+            // 頭部 + 安全帽 + 護目鏡
+            const head = joint(spine, 0, 0.6, 0);
+            add(head, sph(0.165), mSkin, 0, 0.14, 0, 1, 1.05, 1);
+            add(head, GEO('helmet', () => new THREE.SphereGeometry(0.19, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.55)), mH, 0, 0.16, 0.01);
+            // 安全帽中央條紋 (前後兩段)
+            add(head, GEO('stripeF', () => new THREE.SphereGeometry(0.193, 6, 12, Math.PI * 1.5 - 0.18, 0.36, 0, Math.PI * 0.52)), mHS, 0, 0.16, 0.01);
+            add(head, GEO('stripeB', () => new THREE.SphereGeometry(0.193, 6, 12, Math.PI * 0.5 - 0.18, 0.36, 0, Math.PI * 0.52)), mHS, 0, 0.16, 0.01);
+            add(head, GEO('visor', () => new THREE.SphereGeometry(0.185, 20, 8, Math.PI * 1.5 - 1.0, 2.0, Math.PI * 0.42, Math.PI * 0.18)), mVisor, 0, 0.15, 0);
+            add(head, sph(0.03), mSkin, 0, 0.075, -0.165);                    // 鼻子
+            add(head, box(0.06, 0.012, 0.01), M(0x8a3b2e), 0, 0.025, -0.152);  // 嘴巴
+            add(head, sph(0.04), mSkin, -0.165, 0.12, 0.01, 0.5, 1, 0.8);       // 耳朵
+            add(head, sph(0.04), mSkin, 0.165, 0.12, 0.01, 0.5, 1, 0.8);
+            add(head, sph(0.1), M(p.hair, { roughness: 0.9 }), 0, 0.07, 0.12, 1.3, 0.8, 0.8); // 後腦頭髮
+
+            // 手臂
+            const arm = (s) => {
+                const sh = joint(spine, s * 0.255, 0.45, 0);
+                add(sh, sph(0.08), mJ);
+                add(sh, limbGeo(0.27, 0.068, 0.056), mJ);
+                const el = joint(sh, 0, -0.27, 0);
+                add(el, sph(0.062), mA, 0, 0, 0.02, 1, 1, 0.9);                 // 護肘
+                add(el, limbGeo(0.24, 0.054, 0.045), mJ);
+                add(el, cyl(0.05, 0.05, 0.04), mA, 0, -0.22, 0);               // 袖口
+                const hand = joint(el, 0, -0.25, 0);
+                add(hand, sph(0.055), mG, 0, -0.035, 0, 0.85, 1.2, 1);          // 手套
+                add(hand, sph(0.024), mG, -s * 0.03, -0.015, -0.04);           // 拇指
+                return { sh, el };
+            };
+            // 腿 + 直排輪
+            const wheelGeo = GEO('wheel', () => { const g = new THREE.CylinderGeometry(0.045, 0.045, 0.035, 14); g.rotateZ(Math.PI / 2); return g; });
+            const leg = (s) => {
+                const hip = joint(hips, s * 0.11, -0.03, 0);
+                add(hip, limbGeo(0.42, 0.09, 0.068), mP);
+                const knee = joint(hip, 0, -0.42, 0);
+                add(knee, sph(0.075), mDark, 0, 0, -0.03, 1, 1.15, 0.8);       // 護膝
+                add(knee, limbGeo(0.4, 0.068, 0.05), mP);
+                const ank = joint(knee, 0, -0.4, 0);
+                add(ank, cyl(0.07, 0.075, 0.12), mBoot);
+                add(ank, box(0.14, 0.15, 0.28), mBoot, 0, -0.07, -0.03);
+                add(ank, sph(0.07), mBoot, 0, -0.09, -0.16, 1, 0.8, 1);
+                add(ank, box(0.15, 0.03, 0.12), mA, 0, 0.0, -0.02);           // 鞋扣
+                add(ank, box(0.15, 0.03, 0.1), mA, 0, -0.07, -0.12);
+                add(ank, box(0.05, 0.05, 0.38), mFrame, 0, -0.165, -0.03);     // 輪架
+                for (const z of [-0.17, -0.07, 0.03, 0.13]) add(ank, wheelGeo, mW, 0, -0.2, z);
+                return { hip, knee, ank };
+            };
+            const L = arm(-1), R = arm(1), LL = leg(-1), RL = leg(1);
+
+            root.scale.setScalar(0.85);
+            root.userData = {
+                isSkater: true, rig, hips, spine, head, phase: Math.random() * Math.PI * 2,
+                lSh: L.sh, lEl: L.el, rSh: R.sh, rEl: R.el,
+                lHip: LL.hip, lKnee: LL.knee, lAnk: LL.ank, rHip: RL.hip, rKnee: RL.knee, rAnk: RL.ank
+            };
+            return root;
+        }
+
+        /* ---------- 天空障礙：海鷗 (滑行或跳過) 與 小飛機 (跳過或換道)，都面向 +z 朝玩家飛來 ---------- */
+        function createBirdModel() {
+            const root = new THREE.Group();
+            const white = M(0xf7f7f7, { roughness: 0.8 }), gray = M(0x9aa4ad, { roughness: 0.8 }), dark = M(0x2b2b2b);
+            add(root, sph(0.22), white, 0, 0, 0, 0.8, 0.7, 1.4);
+            add(root, sph(0.13), white, 0, 0.1, 0.28);
+            const beak = add(root, GEO('beak', () => new THREE.ConeGeometry(0.05, 0.16, 8)), M(0xffa000), 0, 0.08, 0.43);
+            beak.rotation.x = Math.PI / 2;
+            add(root, sph(0.025), dark, -0.07, 0.14, 0.36); add(root, sph(0.025), dark, 0.07, 0.14, 0.36);
+            add(root, box(0.2, 0.04, 0.22), gray, 0, 0.02, -0.33);
+            const wing = (s) => {
+                const pv = joint(root, s * 0.12, 0.05, 0);
+                add(pv, box(0.7, 0.04, 0.32), gray, s * 0.35, 0, 0);
+                add(pv, box(0.24, 0.045, 0.26), dark, s * 0.78, 0, -0.02);
+                return pv;
+            };
+            root.userData = { isBird: true, lw: wing(-1), rw: wing(1), phase: Math.random() * 10 };
+            root.scale.setScalar(1.3);
+            return root;
+        }
+
+        function createPlaneModel() {
+            const root = new THREE.Group();
+            const body = M(0xffffff, { roughness: 0.35 }), red = M(0xe53935, { roughness: 0.35 }), glass = M(0x5dade2, { metalness: 0.6, roughness: 0.1 });
+            const fus = add(root, cyl(0.32, 0.22, 2.4), body, 0, 0, 0); fus.rotation.x = Math.PI / 2;
+            add(root, sph(0.32), red, 0, 0, 1.2, 1, 1, 0.8);
+            add(root, sph(0.25), glass, 0, 0.25, 0.4, 0.9, 0.7, 1.4);
+            add(root, box(2.3, 0.07, 0.6), red, 0, -0.05, 0.3);
+            add(root, box(2.32, 0.075, 0.12), body, 0, -0.05, 0.1);
+            add(root, box(1.0, 0.05, 0.35), red, 0, 0.05, -1.05);
+            add(root, box(0.05, 0.55, 0.4), red, 0, 0.32, -1.05);
+            const prop = joint(root, 0, 0, 1.5);
+            add(prop, box(0.1, 1.3, 0.04), M(0x333333));
+            add(prop, box(1.3, 0.1, 0.04), M(0x333333));
+            add(prop, sph(0.08), M(0xcccccc, { metalness: 0.8 }));
+            root.userData = { isPlane: true, prop, phase: Math.random() * 10 };
+            return root;
+        }
+
+        function createCarModel() {
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xee2222 });
+            const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ccff });
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.6, 3), bodyMat); body.position.y = 0.5; body.castShadow = true; group.add(body);
+            const top = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.5, 1.5), glassMat); top.position.set(0, 1.05, -0.2); top.castShadow = true; group.add(top);
+
+            const wGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.2, 16); wGeo.rotateZ(Math.PI/2);
+            for(let x of [-0.85, 0.85]) { for(let z of [-1, 1]) {
+                let w = new THREE.Mesh(wGeo, wheelMat); w.position.set(x, 0.25, z); w.castShadow = true; group.add(w);
+            }}
+            group.userData = { isCar: true };
+            return group;
+        }
+
+        function createTrainModel(carriageCount = 3) {
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xFFA500 });
+            const roofMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+
+            const carLength = 12;
+            const gap = 1.0;
+
+            for(let i=0; i<carriageCount; i++) {
+                const zOffset = -i * (carLength + gap);
+                const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.0, carLength), bodyMat);
+                body.position.set(0, 1.0, zOffset); body.castShadow = true; group.add(body);
+                const roof = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.1, carLength), roofMat);
+                roof.position.set(0, 2.05, zOffset); roof.castShadow = true; group.add(roof);
+            }
+            group.userData = { isTrain: true, totalLength: carriageCount * (carLength + gap) };
+            return group;
+        }
+
+        function createStarModel() {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({ color: 0xFFD700, emissive: 0xaa8800 });
+            const tet1 = new THREE.Mesh(new THREE.TetrahedronGeometry(0.4), mat);
+            const tet2 = new THREE.Mesh(new THREE.TetrahedronGeometry(0.4), mat);
+            tet2.rotation.x = Math.PI; tet2.rotation.y = Math.PI / 4;
+            group.add(tet1); group.add(tet2);
+            return group;
+        }
+
+        function createBuildingModel() {
+            const h = 5 + Math.random() * 15;
+            const geo = new THREE.BoxGeometry(3 + Math.random()*2, h, 3 + Math.random()*2);
+            const mat = new THREE.MeshStandardMaterial({ color: Math.random() > 0.5 ? 0xaaaaaa : 0x446688 });
+            const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = true;
+            mesh.userData.baseY = h / 2;
+            return mesh;
+        }
+
+        function createTreeModel() {
+            const group = new THREE.Group();
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 1.5), new THREE.MeshStandardMaterial({color:0x5C4033})); trunk.position.y = 0.75; group.add(trunk);
+            const leaves = new THREE.Mesh(new THREE.ConeGeometry(1.5, 3, 8), new THREE.MeshStandardMaterial({color:0x228B22})); leaves.position.y = 2.5; group.add(leaves);
+            group.userData.baseY = 0;
+            return group;
+        }
+
+        function createCloudModel() {
+            const g = new THREE.Group();
+            const mat = M(0xffffff, { roughness: 1, emissive: 0xffffff, emissiveIntensity: 0.25 });
+            const n = 4 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < n; i++) {
+                const r = 1.2 + Math.random();
+                addNS(g, sph(1), mat, (i - n / 2) * 1.3, Math.random() * 0.8, (Math.random() - 0.5) * 1.5, r, r * 0.75, r);
+            }
+            g.userData = { isCloud: true, baseY: 0 };
+            return g;
+        }
+
+        /* ---------- 區段結構：天空步道 / 坡道 / 地下道 (本地座標：前緣在 z=0，往 -z 延伸 len) ---------- */
+        function buildDeck() {
+            const g = new THREE.Group(); const W = ROAD_HALF * 2;
+            const conc = M(0xb0b0b0, { roughness: 0.9 }), metal = M(0xdfe6ec, { metalness: 0.7, roughness: 0.3 });
+            const glass = M(0x9fd8ff, { transparent: true, opacity: 0.3, depthWrite: false });
+            add(g, box(W, 0.5, SEG), M(0x5d6d7e, { roughness: 0.7 }), 0, SKY_Y - 0.25, -SEG / 2);
+            for (const s of [-1, 1]) {
+                addNS(g, box(0.2, 0.02, SEG), M(0xffcc00), s * (W / 2 - 0.3), SKY_Y + 0.01, -SEG / 2);
+                for (const z of [-2, -7, -12, -17]) add(g, box(0.1, 1.1, 0.1), metal, s * (W / 2 + 0.05), SKY_Y + 0.55, z);
+                add(g, box(0.12, 0.1, SEG), metal, s * (W / 2 + 0.05), SKY_Y + 1.1, -SEG / 2);
+                addNS(g, box(0.04, 0.9, SEG), glass, s * (W / 2 + 0.05), SKY_Y + 0.5, -SEG / 2);
+                add(g, cyl(0.45, 0.55, SKY_Y - 0.5), conc, s * (W / 2 - 1), (SKY_Y - 0.5) / 2, -SEG / 2);
+            }
+            for (let i = 1; i < LANE_COUNT; i++) {
+                const x = (LANES[i - 1] + LANES[i]) / 2;
+                for (const z of [-3, -13]) addNS(g, box(0.1, 0.02, 5), M(0xffffff), x, SKY_Y + 0.01, z);
+            }
+            add(g, box(W, 0.6, 0.8), conc, 0, SKY_Y - 0.8, -SEG / 2);
+            g.userData.len = SEG;
+            return g;
+        }
+
+        function buildRamp(up) {
+            const g = new THREE.Group(); const W = ROAD_HALF * 2, L = RAMP_L, H = SKY_Y, t = 0.4;
+            const th = (up ? 1 : -1) * Math.atan2(H, L), hyp = Math.hypot(H, L);
+            const conc = M(0xb0b0b0, { roughness: 0.9 });
+            const tilt = (m) => { m.rotation.x = th; return m; };
+            tilt(add(g, box(W, t, hyp), M(0x5d6d7e, { roughness: 0.7 }), 0, H / 2 - t / 2 * Math.cos(th), -L / 2 - t / 2 * Math.sin(th)));
+            for (const s of [-1, 1]) {
+                tilt(add(g, box(0.25, 1.1, hyp), M(0xdfe6ec, { metalness: 0.5, roughness: 0.4 }), s * (W / 2 + 0.12), H / 2 + 0.45, -L / 2));
+                tilt(addNS(g, box(0.2, 0.02, hyp), M(0xffcc00), s * (W / 2 - 0.3), H / 2 + 0.02, -L / 2));
+                for (const f of [0.35, 0.7, 0.95]) {
+                    const h = up ? H * f : H * (1 - f);
+                    if (h > 0.6) add(g, cyl(0.4, 0.5, h), conc, s * (W / 2 - 1), h / 2, -L * f);
+                }
+            }
+            for (let i = 1; i < LANE_COUNT; i++) tilt(addNS(g, box(0.1, 0.02, hyp), M(0xffffff), (LANES[i - 1] + LANES[i]) / 2, H / 2 + 0.02, -L / 2));
+            if (up) {
+                for (const s of [-1, 1]) {
+                    add(g, box(0.2, 4, 0.2), M(0x666666), s * (W / 2 + 2.2), 2, 0);
+                    const sign = makeSign('☁ SKY WALK ↑', 3.6, 1.2, '#1565C0', '#ffffff');
+                    sign.position.set(s * (W / 2 + 2.2), 4.4, 0.12); g.add(sign);
+                }
+            }
+            g.userData.len = L;
+            return g;
+        }
+
+        function buildTunnel() {
+            const g = new THREE.Group(); const IW = TUNNEL_HALF * 2;
+            const wall = M(0xc9c3b6, { roughness: 0.9 }), rib = M(0x7a7a7a, { roughness: 0.8 });
+            const amber = M(0xffb347, { emissive: 0xffa000, emissiveIntensity: 1 }), lamp = M(0xffffff, { emissive: 0xfff4d6, emissiveIntensity: 1 });
+            add(g, box(IW, 0.06, SEG), M(0x2a2a2e, { roughness: 0.9 }), 0, 0.03, -SEG / 2);
+            for (const x of [-LANE_WIDTH / 2, LANE_WIDTH / 2]) for (const z of [-3, -13]) addNS(g, box(0.1, 0.01, 5), M(0xffd400), x, 0.065, z);
+            for (const s of [-1, 1]) {
+                add(g, box(0.6, TUNNEL_H, SEG), wall, s * (TUNNEL_HALF + 0.3), TUNNEL_H / 2, -SEG / 2);
+                addNS(g, box(0.04, 0.8, SEG), M(0x2e86c1), s * (TUNNEL_HALF - 0.02), 1.4, -SEG / 2);
+                addNS(g, box(0.06, 0.12, SEG * 0.95), amber, s * (TUNNEL_HALF - 0.03), 4.0, -SEG / 2);
+                for (const z of [-0.3, -10.3]) add(g, box(0.25, TUNNEL_H, 0.4), rib, s * (TUNNEL_HALF - 0.12), TUNNEL_H / 2, z);
+                add(g, box(16, TUNNEL_H + 0.6, SEG), M(0x6d5b3a, { roughness: 1 }), s * (TUNNEL_HALF + 0.6 + 8), (TUNNEL_H + 0.6) / 2, -SEG / 2);
+            }
+            add(g, box(IW + 1.2, 0.6, SEG), M(0x555555), 0, TUNNEL_H + 0.3, -SEG / 2);
+            for (const z of [-0.3, -10.3]) add(g, box(IW, 0.4, 0.4), rib, 0, TUNNEL_H - 0.2, z);
+            for (const z of [-5, -15]) addNS(g, box(1.6, 0.08, 0.8), lamp, 0, TUNNEL_H - 0.04, z);
+            add(g, box(IW + 34, 2.4, SEG), M(0x4CAF50), 0, TUNNEL_H + 1.8, -SEG / 2);
+            g.userData.len = SEG;
+            return g;
+        }
+
+        function buildPortal(entrance) {
+            const g = new THREE.Group(); const D = PORTAL_D, H = TUNNEL_H, side = 16;
+            const conc = M(0xa0a0a0, { roughness: 0.9 }), yellow = M(0xffcc00);
+            for (const s of [-1, 1]) {
+                add(g, box(side, H + 3, D), conc, s * (TUNNEL_HALF + side / 2), (H + 3) / 2, -D / 2);
+                addNS(g, box(0.3, H, 0.1), yellow, s * (TUNNEL_HALF + 0.15), H / 2, 0.05);
+            }
+            add(g, box(TUNNEL_HALF * 2, 3, D), conc, 0, H + 1.5, -D / 2);
+            addNS(g, box(TUNNEL_HALF * 2 + 0.6, 0.3, 0.1), yellow, 0, H + 0.15, 0.05);
+            add(g, box(side * 2 + TUNNEL_HALF * 2 + 2, 0.6, D + 0.4), M(0x4CAF50), 0, H + 3.3, -D / 2);
+            add(g, box(TUNNEL_HALF * 2, 0.06, D), M(0x2a2a2e, { roughness: 0.9 }), 0, 0.03, -D / 2);
+            if (entrance) {
+                const sign = makeSign('🚇 地下道 BONUS', 7, 1.6, '#263238', '#FFD54F');
+                sign.position.set(0, H + 1.5, 0.08); g.add(sign);
+            }
+            g.userData.len = D;
+            return g;
+        }
+
+        const STRUCT_BUILDERS = {
+            deck: buildDeck, rampUp: () => buildRamp(true), rampDown: () => buildRamp(false),
+            tunnel: buildTunnel, portalIn: () => buildPortal(true), portalOut: () => buildPortal(false)
+        };
+        function placeStructure(kind, z) {
+            let s = structures.find(o => !o.active && o.userData.kind === kind);
+            if (!s) { s = STRUCT_BUILDERS[kind](); s.userData.kind = kind; scene.add(s); structures.push(s); }
+            s.active = true; s.visible = true; s.position.set(0, 0, z);
+            return s;
+        }
+
+        function initObjectPools() {
+            for(let i=0; i<8; i++) {
+                const m = createSkaterModel(SKATER_PALETTES.rivals[i % SKATER_PALETTES.rivals.length]);
+                m.rotation.y = Math.PI; // 對手迎面滑來
+                setupPoolObj(obstacles, m, 'skater');
+            }
+            for(let i=0; i<8; i++) { let m = createCarModel(); setupPoolObj(obstacles, m, 'car'); }
+
+            for(let i=0; i<4; i++) { let m = createTrainModel(3); setupPoolObj(obstacles, m, 'train_short'); }
+            for(let i=0; i<3; i++) { let m = createTrainModel(10); setupPoolObj(obstacles, m, 'train_long'); }
+            for(let i=0; i<2; i++) { let m = createTrainModel(25); setupPoolObj(obstacles, m, 'train_mega'); }
+            for(let i=0; i<10; i++) setupPoolObj(obstacles, createBirdModel(), 'bird');
+            for(let i=0; i<6; i++) setupPoolObj(obstacles, createPlaneModel(), 'plane');
+
+            const coinGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16); const coinMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, emissive: 0x554400 });
+            for(let i=0; i<150; i++) { let mesh = new THREE.Mesh(coinGeo, coinMat); mesh.rotation.x = Math.PI/2; mesh.castShadow=true; setupPoolObj(coins, mesh, 'coin'); }
+
+            const puGeo = new THREE.OctahedronGeometry(0.4);
+            for(let i=0; i<4; i++) { let mesh = new THREE.Mesh(puGeo, new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x005555 })); mesh.castShadow=true; setupPoolObj(powerups, mesh, 'shield'); }
+            for(let i=0; i<4; i++) { let mesh = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.15, 8, 16), new THREE.MeshStandardMaterial({ color: 0xFF1493, emissive: 0x8B008B })); mesh.castShadow=true; setupPoolObj(powerups, mesh, 'magnet'); }
+            for(let i=0; i<4; i++) { let mesh = createStarModel(); mesh.castShadow=true; setupPoolObj(powerups, mesh, 'star'); }
+
+            for(let i=0; i<30; i++) {
+                let mesh = Math.random() > 0.5 ? createBuildingModel() : createTreeModel();
+                mesh.active = false; mesh.visible = false; mesh.position.set(0, -50, 100); scene.add(mesh); sceneryObjs.push({ mesh: mesh });
+            }
+            for(let i=0; i<24; i++) {
+                const mesh = createCloudModel();
+                mesh.active = false; mesh.visible = false; mesh.position.set(0, -50, 100); scene.add(mesh); sceneryObjs.push({ mesh: mesh });
+            }
+        }
+
+        function setupPoolObj(pool, mesh, type) {
+            const container = new THREE.Group();
+            container.add(mesh); container.position.set(0, -50, 100);
+            container.active = false; container.visible = false; container.type = type;
+            scene.add(container);
+            pool.push({ mesh: container, innerMesh: mesh, box: new THREE.Box3() });
+        }
+
+        /* =========================================================
+           四、輸入與控制
+           ========================================================= */
+        let touchStartX = 0; let touchStartY = 0;
+        function setupInputs() {
+            window.addEventListener('keydown', (e) => {
+                if (!state.isPlaying) return;
+                if (e.key === 'ArrowLeft' || e.key === 'a') movePlayer(-1);
+                if (e.key === 'ArrowRight' || e.key === 'd') movePlayer(1);
+                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') jump();
+                if (e.key === 'ArrowDown' || e.key === 's') slide();
+                if (e.key === 'p' || e.key === 'P') togglePause();
+            });
+
+            document.body.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY; }, {passive: false});
+            document.body.addEventListener('touchend', e => {
+                if (!state.isPlaying) return;
+                const diffX = e.changedTouches[0].screenX - touchStartX; const diffY = e.changedTouches[0].screenY - touchStartY;
+                if (Math.abs(diffX) > Math.abs(diffY)) { if (Math.abs(diffX) > 30) (diffX > 0) ? movePlayer(1) : movePlayer(-1); }
+                else { if (Math.abs(diffY) > 30) (diffY < 0) ? jump() : slide(); }
+            }, {passive: false});
+
+            document.getElementById('start-btn').addEventListener('click', startGame); document.getElementById('restart-btn').addEventListener('click', resetGame); document.getElementById('pause-btn').addEventListener('click', togglePause);
+            document.getElementById('btn-left').addEventListener('touchstart', (e)=>{ e.preventDefault(); movePlayer(-1);}); document.getElementById('btn-right').addEventListener('touchstart', (e)=>{ e.preventDefault(); movePlayer(1);});
+            document.getElementById('btn-up').addEventListener('touchstart', (e)=>{ e.preventDefault(); jump();}); document.getElementById('btn-down').addEventListener('touchstart', (e)=>{ e.preventDefault(); slide();});
+        }
+
+        function movePlayer(dir) {
+            if (dir === -1 && state.lane > 0) state.lane--;
+            if (dir === 1 && state.lane < activeLanes.length - 1) state.lane++;
+            pState.targetX = activeLanes[state.lane];
+        }
+
+        // 切換跑道組 (4 道 ↔ 3 道)，玩家移到最近的跑道 (同距離時選靠中間的)
+        function setLaneSet(lanes) {
+            const x = pState.targetX;
+            let best = 0;
+            lanes.forEach((lx, i) => {
+                const d = Math.abs(lx - x), bd = Math.abs(lanes[best] - x);
+                if (d < bd - 0.01 || (Math.abs(d - bd) <= 0.01 && Math.abs(lx) < Math.abs(lanes[best]))) best = i;
+            });
+            activeLanes = lanes; state.lane = best; pState.targetX = lanes[best];
+        }
+
+        function jump() {
+            if (!pState.isJumping && !pState.isSliding && player.position.y - pState.currentFloorY < 0.2) {
+                pState.isJumping = true; pState.yVelocity = JUMP_VELOCITY; playSound('jump');
+            }
+        }
+
+        function slide() {
+            if (!pState.isJumping && !pState.isSliding) {
+                pState.isSliding = true; pState.slideTimer = 0.8;
+            } else if (pState.isJumping) pState.yVelocity = -JUMP_VELOCITY;
+        }
+        function togglePause() { if (!state.isPlaying && !state.isPaused) return; state.isPaused = !state.isPaused; }
+
+        /* =========================================================
+           五、遊戲邏輯與動態生成
+           ========================================================= */
+        function startGame() { initAudio(); document.getElementById('start-screen').classList.add('hidden'); document.getElementById('hud').classList.remove('hidden'); state.isPlaying = true; }
+
+        function resetGame() {
+            state.distance = 0; state.score = 0; state.coins = 0; state.speed = 20; state.combo = 0;
+            state.shieldTime = 0; state.magnetTime = 0; state.starTime = 0;
+            player.position.set(LANES[START_LANE], 0, 0);
+            player.shield.visible = false; player.magnetRing.visible = false; player.starAura.visible = false;
+            pState.isJumping = false; pState.isSliding = false; pState.yVelocity = 0; pState.currentFloorY = 0; pState.levelY = 0;
+
+            obstacles.forEach(o => { o.mesh.active = false; o.mesh.visible = false; });
+            coins.forEach(c => { c.mesh.active = false; c.mesh.visible = false; });
+            powerups.forEach(p => { p.mesh.active = false; p.mesh.visible = false; });
+            sceneryObjs.forEach(s => { s.mesh.active = false; s.mesh.visible = false; });
+            resetZone();
+
+            document.getElementById('gameover-screen').classList.add('hidden'); document.getElementById('new-best-text').style.display = 'none'; document.getElementById('hud').classList.remove('hidden');
+            updateHUD(); state.isPlaying = true;
+        }
+
+        function shuffle(arr) {
+            for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+            return arr;
+        }
+        function laneOf(x) { return Math.round((x - LANES[0]) / LANE_WIDTH); }
+
+        /* ---------- 區段控制：地面 → (等待清場) → 入口 → 步道/隧道節段 → 出口 → 地面 ---------- */
+        function resetZone() {
+            structures.forEach(s => { s.active = false; s.visible = false; });
+            zone = {
+                phase: 'ground', lastType: null, nextType: 'sky', nextAt: 300,
+                entryFrontZ: -999, startZ: -999, cursorZ: 0, remaining: 0,
+                exitSpawned: false, endZ: -999, exitBackZ: -999, bannerShown: true, tunnelF: 0
+            };
+            activeLanes = LANES; state.lane = START_LANE; pState.targetX = LANES[START_LANE];
+        }
+
+        // 某個 z 位置屬於哪種區域：'ground' | 'sky' | 'tunnel' | null (過渡中，不生成)
+        function zoneAreaAt(z) {
+            if (zone.phase === 'ground') return 'ground';
+            if (zone.phase === 'waiting') return null;
+            if (zone.startZ < z + 5) return null;
+            if (zone.exitSpawned && zone.endZ > z - 5) return null;
+            return zone.lastType;
+        }
+
+        function updateZoneSpawning() {
+            if (zone.phase === 'ground' && state.distance >= zone.nextAt) zone.phase = 'waiting';
+
+            if (zone.phase === 'waiting') {
+                const busy = obstacles.some(o => o.mesh.active && o.mesh.position.z - (o.innerMesh.userData.totalLength || 0) < SPAWN_Z + 30)
+                    || coins.some(c => c.mesh.active && c.mesh.position.z < SPAWN_Z + 30)
+                    || powerups.some(p => p.mesh.active && p.mesh.position.z < SPAWN_Z + 30);
+                if (!busy) {
+                    const type = zone.nextType;
+                    const entryLen = type === 'sky' ? RAMP_L : PORTAL_D;
+                    placeStructure(type === 'sky' ? 'rampUp' : 'portalIn', SPAWN_Z);
+                    Object.assign(zone, {
+                        phase: 'active', lastType: type, entryFrontZ: SPAWN_Z, startZ: SPAWN_Z - entryLen, cursorZ: SPAWN_Z - entryLen,
+                        remaining: type === 'sky' ? SKY_SEGMENTS : TUNNEL_SEGMENTS, exitSpawned: false, endZ: -999, exitBackZ: -999, bannerShown: false
+                    });
+                }
+            }
+
+            if (zone.phase === 'active') {
+                while (!zone.exitSpawned && zone.cursorZ > -300) {
+                    if (zone.remaining > 0) {
+                        placeStructure(zone.lastType === 'sky' ? 'deck' : 'tunnel', zone.cursorZ);
+                        zone.cursorZ -= SEG; zone.remaining--;
+                    } else {
+                        const exitLen = zone.lastType === 'sky' ? RAMP_L : PORTAL_D;
+                        placeStructure(zone.lastType === 'sky' ? 'rampDown' : 'portalOut', zone.cursorZ);
+                        zone.endZ = zone.cursorZ; zone.exitBackZ = zone.cursorZ - exitLen; zone.cursorZ -= exitLen;
+                        zone.exitSpawned = true;
+                    }
+                }
+                if (zone.exitSpawned && zone.exitBackZ > SPAWN_Z + 10) {
+                    zone.phase = 'ground';
+                    zone.nextType = zone.lastType === 'sky' ? 'tunnel' : 'sky';
+                    zone.nextAt = state.distance + 280 + Math.random() * 150;
+                }
+            }
+        }
+
+        function moveZoneTracking(d) {
+            zone.entryFrontZ += d; zone.startZ += d; zone.cursorZ += d; zone.endZ += d; zone.exitBackZ += d;
+            if (!zone.bannerShown && zone.entryFrontZ >= 0) {
+                zone.bannerShown = true;
+                showZoneBanner(zone.lastType === 'sky' ? '☁ 天空步道 SKY WALK' : '🚇 地下道 BONUS TUNNEL');
+                playSound('zone');
+            }
+        }
+
+        // 仍佔據生成區的火車所在跑道 (避免障礙物生成在火車裡面)
+        function getTrainLanes(zPos) {
+            const set = new Set();
+            for (const o of obstacles) {
+                if (o.mesh.active && o.mesh.type.includes('train')) {
+                    const back = o.mesh.position.z - (o.innerMesh.userData.totalLength || 0);
+                    if (back < zPos + 25) set.add(laneOf(o.mesh.position.x));
+                }
+            }
+            return set;
+        }
+
+        function spawnGroundRow(zPos) {
+            const trainLanes = getTrainLanes(zPos);
+            const freeLanes = shuffle(LANE_IDS.filter(l => !trainLanes.has(l)));
+            const trainsAllowed = zone.nextAt - state.distance > 80; // 快進入特殊區段時不生成火車
+
+            const r = Math.random();
+            if (r < 0.6) {
+                let obsCount = 1;
+                if (state.distance > 1500) obsCount = 1 + Math.floor(Math.random() * 3);
+                else if (state.distance > 800) obsCount = Math.random() > 0.5 ? 2 : 1;
+                obsCount = Math.min(obsCount, freeLanes.length - 1); // 永遠留至少一條通道
+
+                let trainCount = trainLanes.size;
+                const lanesUsed = new Set();
+                for (let i = 0; i < obsCount; i++) {
+                    const l = freeLanes[i]; lanesUsed.add(l);
+                    let obsType = 'skater';
+                    if (state.distance > 100 && Math.random() > 0.4) obsType = 'car';
+
+                    if (trainsAllowed && state.distance > 300 && Math.random() > 0.6 && trainCount < 2) {
+                        let tr = Math.random();
+                        if(tr < 0.4) obsType = 'train_short';
+                        else if(tr < 0.7) obsType = 'train_long';
+                        else obsType = 'train_mega';
+                        trainCount++;
+                    }
+                    spawnEntity(obstacles, obsType, LANES[l], 0, zPos);
+                }
+                if (Math.random() > 0.3) {
+                    const coinLanes = freeLanes.filter(l => !lanesUsed.has(l));
+                    if (coinLanes.length) {
+                        const cy = Math.random() > 0.5 ? 0.5 : 2.5;
+                        spawnEntitySeq(coins, 'coin', LANES[coinLanes[0]], cy, zPos, 3 + Math.floor(Math.random()*3));
+                    }
+                }
+            } else if (r < 0.9) {
+                const l = Math.floor(Math.random() * LANE_COUNT);
+                spawnEntitySeq(coins, 'coin', LANES[l], trainLanes.has(l) ? 2.6 : 0.5, zPos, 5); // 火車頂也會有金幣
+            } else {
+                spawnPowerup(LANES[Math.floor(Math.random() * LANE_COUNT)], 1.0, zPos, trainLanes);
+            }
+        }
+
+        function spawnPowerup(x, y, z, trainLanes) {
+            const randP = Math.random();
+            const pType = randP < 0.33 ? 'magnet' : (randP < 0.66 ? 'star' : 'shield');
+            spawnEntity(powerups, pType, x, trainLanes && trainLanes.has(laneOf(x)) ? 3.1 : y, z);
+        }
+
+        // 天空：海鷗 (高度在頭部 → 滑行或跳過) 與 小飛機 (低空 → 只能跳過或換道)
+        function spawnSkyRow(zPos) {
+            const lanes = shuffle([...LANE_IDS]);
+            let n = 1;
+            if (state.distance > 1500) n = 1 + Math.floor(Math.random() * 3);
+            else if (state.distance > 600) n = Math.random() > 0.5 ? 2 : 1;
+            n = Math.min(n, LANE_COUNT - 1);
+            for (let i = 0; i < n; i++) {
+                const type = Math.random() < 0.6 ? 'bird' : 'plane';
+                spawnEntity(obstacles, type, LANES[lanes[i]], SKY_Y + (type === 'bird' ? 1.35 : 0.85), zPos);
+            }
+            if (Math.random() > 0.25) spawnEntitySeq(coins, 'coin', LANES[lanes[n]], SKY_Y + 0.5, zPos, 4 + Math.floor(Math.random() * 3));
+            if (Math.random() < 0.08) spawnPowerup(LANES[lanes[LANE_COUNT - 1]], SKY_Y + 1.0, zPos - 20);
+        }
+
+        // 地下道：沒有障礙物，只有大量金幣 (直線 / 拱形) 與道具
+        function spawnTunnelRow(zPos) {
+            const lanes = shuffle([0, 1, 2]);
+            const k = 1 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < k; i++) {
+                const x = TUNNEL_LANES[lanes[i]];
+                if (Math.random() < 0.6) spawnEntitySeq(coins, 'coin', x, 0.5, zPos, 6);
+                else for (let j = 0; j < 7; j++) spawnEntity(coins, 'coin', x, 0.5 + Math.sin(j / 6 * Math.PI) * 2.0, zPos - j * 3);
+            }
+            if (Math.random() < 0.3) spawnPowerup(TUNNEL_LANES[Math.floor(Math.random() * 3)], 1.0, zPos - 24);
+        }
+
+        let spawnTimer = 0, sceneryTimer = 0, lastArea = 'ground';
+        function spawnObjects(delta) {
+            updateZoneSpawning();
+
+            const area = zoneAreaAt(SPAWN_Z);
+            if (area && area !== lastArea) spawnTimer = 0; // 新區段一開始就有內容
+            lastArea = area;
+            spawnTimer -= delta * state.baseSpeed * (state.speed/20);
+            if (spawnTimer <= 0) {
+                if (area === 'ground') { spawnTimer = 1.5 + Math.random() * 2; spawnGroundRow(SPAWN_Z); }
+                else if (area === 'sky') { spawnTimer = 1.3 + Math.random() * 1.5; spawnSkyRow(SPAWN_Z); }
+                else if (area === 'tunnel') { spawnTimer = 0.55 + Math.random() * 0.4; spawnTunnelRow(SPAWN_Z); }
+                else spawnTimer = 0.2;
+            }
+
+            sceneryTimer -= delta * state.baseSpeed * (state.speed/20);
+            if (sceneryTimer <= 0) {
+                sceneryTimer = 0.5 + Math.random() * 0.5;
+                const inTunnelZone = zone.phase === 'active' && zone.lastType === 'tunnel';
+                const inSkyZone = zone.phase === 'active' && zone.lastType === 'sky';
+                if (!inTunnelZone) {
+                    const side = Math.random() > 0.5 ? 1 : -1;
+                    const xPos = side * (ROAD_HALF + 4 + Math.random() * 10);
+                    const sItem = sceneryObjs.find(i => !i.mesh.active && !i.mesh.userData.isCloud);
+                    if (sItem) { sItem.mesh.active = true; sItem.mesh.position.set(xPos, sItem.mesh.userData.baseY, -250); sItem.mesh.visible = true; }
+                }
+                if (inSkyZone) {
+                    const side = Math.random() > 0.5 ? 1 : -1;
+                    const cItem = sceneryObjs.find(i => !i.mesh.active && i.mesh.userData.isCloud);
+                    if (cItem) { cItem.mesh.active = true; cItem.mesh.position.set(side * (ROAD_HALF + 3 + Math.random() * 25), SKY_Y - 6 + Math.random() * 14, -250); cItem.mesh.visible = true; }
+                }
+            }
+        }
+
+        function spawnEntity(pool, type, x, y, z) {
+            const item = pool.find(i => !i.mesh.active && i.mesh.type === type);
+            if (item) { item.mesh.active = true; item.mesh.position.set(x, y, z); item.mesh.userData.baseY = y; item.mesh.visible = true; }
+        }
+        function spawnEntitySeq(pool, type, x, y, startZ, count) {
+            for(let i=0; i<count; i++) spawnEntity(pool, type, x, y, startZ - (i*3));
+        }
+
+        const _magnetTarget = new THREE.Vector3();
+        function updateObjects(delta, time) {
+            const moveDist = state.baseSpeed * (state.speed / 20) * 60 * delta;
+
+            if (state.magnetTime > 0) {
+                _magnetTarget.set(player.position.x, player.position.y + 1, player.position.z);
+                coins.forEach(coin => {
+                    if (coin.mesh.active && coin.mesh.position.z > -40 && coin.mesh.position.z < 5) {
+                        coin.mesh.position.lerp(_magnetTarget, 10 * delta);
+                    }
+                });
+            }
+
+            obstacles.forEach(obs => {
+                if (obs.mesh.active) {
+                    const t = obs.mesh.type, u = obs.innerMesh.userData;
+                    obs.mesh.position.z += moveDist;
+                    if (t === 'plane') {
+                        obs.mesh.position.z += 14 * delta;                         // 飛機比地景更快衝過來
+                        u.prop.rotation.z += 40 * delta;
+                        obs.innerMesh.rotation.z = Math.sin(time * 2 + u.phase) * 0.12;
+                    } else if (t === 'bird') {
+                        obs.mesh.position.z += 5 * delta;
+                        const flap = Math.sin(time * 14 + u.phase) * 0.45;
+                        u.lw.rotation.z = -flap; u.rw.rotation.z = flap;
+                        obs.mesh.position.y = obs.mesh.userData.baseY + Math.sin(time * 3 + u.phase) * 0.12;
+                    }
+                    obs.mesh.updateMatrixWorld(true);
+                    obs.box.setFromObject(obs.innerMesh);
+
+                    if (t.includes('train')) obs.box.max.y = obs.mesh.position.y + 1.8;
+                    else if (t === 'car') obs.box.max.y = obs.mesh.position.y + 1.2;
+                    else if (t === 'skater') obs.box.max.y = obs.mesh.position.y + 1.5;
+
+                    let totalLength = u.totalLength || 0;
+                    if (obs.mesh.position.z - totalLength > 20) {
+                        obs.mesh.active = false; obs.mesh.visible = false;
+                    }
+                }
+            });
+
+            coins.forEach(coin => {
+                if (coin.mesh.active) {
+                    coin.mesh.position.z += moveDist; coin.mesh.rotation.y += 5 * delta;
+                    coin.mesh.updateMatrixWorld(true);
+                    coin.box.setFromObject(coin.innerMesh);
+                    if (coin.mesh.position.z > 10) { coin.mesh.active = false; coin.mesh.visible = false; }
+                }
+            });
+
+            powerups.forEach(pu => {
+                if (pu.mesh.active) {
+                    pu.mesh.position.z += moveDist; pu.mesh.rotation.x += 3 * delta; pu.mesh.rotation.y += 3 * delta;
+                    pu.mesh.updateMatrixWorld(true);
+                    pu.box.setFromObject(pu.innerMesh);
+                    if (pu.mesh.position.z > 10) { pu.mesh.active = false; pu.mesh.visible = false; }
+                }
+            });
+
+            sceneryObjs.forEach(s => {
+                if (s.mesh.active) {
+                    s.mesh.position.z += moveDist;
+                    if (s.mesh.position.z > 50) { s.mesh.active = false; s.mesh.visible = false; }
+                }
+            });
+
+            structures.forEach(s => {
+                if (s.active) {
+                    s.position.z += moveDist;
+                    if (s.position.z - s.userData.len > 30) { s.active = false; s.visible = false; }
+                }
+            });
+            moveZoneTracking(moveDist);
+        }
+
+        /* =========================================================
+           六、分離式核心碰撞判定：受傷(小框) 與 收集(大框)
+           ========================================================= */
+        // 玩家腳下的「關卡地板」高度：坡道內插 / 天空步道 / 地面
+        function getLevel(pz) {
+            let y = 0, onRamp = false;
+            for (const s of structures) {
+                if (!s.active) continue;
+                const k = s.userData.kind, z = s.position.z;
+                if (k === 'deck') {
+                    if (pz <= z + 0.05 && pz >= z - SEG - 0.05) y = Math.max(y, SKY_Y);
+                } else if (k === 'rampUp' || k === 'rampDown') {
+                    const u = (z - pz) / RAMP_L;
+                    if (u >= 0 && u <= 1) {
+                        const h = k === 'rampUp' ? u * SKY_Y : (1 - u) * SKY_Y;
+                        if (h >= y) { y = h; onRamp = true; }
+                    }
+                }
+            }
+            return { y, onRamp };
+        }
+
+        function updatePhysics(delta) {
+            player.position.x += (pState.targetX - player.position.x) * 12 * delta;
+            player.rotation.z = (player.position.x - pState.targetX) * 0.15;
+            player.rotation.y = (player.position.x - pState.targetX) * 0.12; // 換道時身體朝向移動方向
+
+            const level = getLevel(player.position.z);
+            pState.levelY = level.y;
+            let floorY = level.y;
+            if (level.y === 0) {
+                for (let obs of obstacles) {
+                    if (obs.mesh.active && obs.mesh.type.includes('train')) {
+                        if (Math.abs(player.position.x - obs.mesh.position.x) < 1.1) {
+                            const trainFront = obs.mesh.position.z + 6;
+                            const totalLength = obs.innerMesh.userData.totalLength || 12;
+                            const trainBack = obs.mesh.position.z - totalLength;
+
+                            if (player.position.z > trainBack && player.position.z < trainFront) {
+                                if (player.position.y >= 1.8 || (pState.yVelocity <= 0 && player.position.y >= 1.5)) {
+                                    floorY = 2.1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            pState.currentFloorY = floorY;
+
+            if (level.onRamp && !pState.isJumping) {
+                // 在坡道上：貼著坡面上下
+                player.position.y = floorY; pState.yVelocity = 0;
+            } else if (player.position.y > floorY || pState.isJumping) {
+                pState.yVelocity -= GRAVITY * delta;
+                player.position.y += pState.yVelocity * delta;
+
+                if (player.position.y <= floorY) {
+                    player.position.y = floorY;
+                    pState.isJumping = false;
+                    pState.yVelocity = 0;
+                }
+            } else {
+                player.position.y = floorY; pState.yVelocity = 0;
+            }
+
+            if (pState.isSliding) {
+                pState.slideTimer -= delta;
+                if (pState.slideTimer <= 0) pState.isSliding = false;
+            }
+        }
+
+        // 進出地下道時切換 4 道 / 3 道
+        function updateLaneSet() {
+            const inTunnel = zone.lastType === 'tunnel' && zone.entryFrontZ > -15 && !(zone.exitSpawned && zone.exitBackZ > 1);
+            if (inTunnel && activeLanes !== TUNNEL_LANES) setLaneSet(TUNNEL_LANES);
+            else if (!inTunnel && activeLanes !== LANES) setLaneSet(LANES);
+        }
+
+        function checkCollisions() {
+            const { x: px, y: py, z: pz } = player.position;
+
+            // 1. 受傷判定框：固定尺寸 (不受手腳擺動影響)，滑行時降低高度
+            const hurtTop = pState.isSliding ? 0.75 : 1.5;
+            hurtBox.min.set(px - 0.28, py + 0.25, pz - 0.25);
+            hurtBox.max.set(px + 0.28, py + hurtTop, pz + 0.25);
+
+            // 2. 收集判定框 (放大範圍，讓金幣像是有微磁力，更好吃到)
+            collectBox.min.set(px - 0.9, py - 0.4, pz - 0.9);
+            collectBox.max.set(px + 0.9, py + 2.1, pz + 0.9);
+
+            // 障礙物碰撞
+            for (let obs of obstacles) {
+                if (obs.mesh.active && hurtBox.intersectsBox(obs.box)) {
+                    if (obs.mesh.type.includes('train') && player.position.y >= 1.5) continue; // 高空豁免權
+
+                    if (state.shieldTime > 0 || state.starTime > 0) {
+                        obs.mesh.active = false; obs.mesh.visible = false;
+                        playSound('crash'); showFloatingText("SMASH!", player.position.x);
+                        if (state.starTime > 0) { state.score += 50; }
+                    } else {
+                        gameOver(); return;
+                    }
+                }
+            }
+
+            // 金幣收集 (使用放大的 CollectBox)
+            for (let coin of coins) {
+                const dist = coin.mesh.position.distanceTo(player.position);
+                if (coin.mesh.active && (collectBox.intersectsBox(coin.box) || (state.magnetTime > 0 && dist < 2.0))) {
+                    coin.mesh.active = false; coin.mesh.visible = false;
+                    playSound('coin'); state.coins++; state.combo++; state.comboTimer = 2.0;
+                    let pts = 10; if (state.combo > 3) { pts = 10 * Math.min(Math.floor(state.combo/3), 5); showCombo(state.combo); }
+                    state.score += pts; showFloatingText(`+${pts}`, player.position.x); updateHUD();
+                }
+            }
+
+            // 道具收集 (使用放大的 CollectBox)
+            for (let pu of powerups) {
+                if (pu.mesh.active && collectBox.intersectsBox(pu.box)) {
+                    pu.mesh.active = false; pu.mesh.visible = false; playSound('powerup');
+                    if (pu.mesh.type === 'shield') {
+                        state.shieldTime = 8.0; player.shield.visible = true;
+                    } else if (pu.mesh.type === 'magnet') {
+                        state.magnetTime = 10.0; player.magnetRing.visible = true;
+                    } else if (pu.mesh.type === 'star') {
+                        state.starTime = 10.0; player.starAura.visible = true;
+                    }
+                }
+            }
+        }
+
+        /* =========================================================
+           七、動畫渲染與系統迴圈
+           ========================================================= */
+        // 姿勢系統：每個關節平滑插值到目標角度，所以 滑行 ↔ 跳躍 ↔ 落地 切換自然
+        // 角度慣例 (模型正面朝 -z)：肩/髖 rotation.x 正值 = 往前抬；膝 rotation.x 負值 = 彎曲；脊椎負值 = 前傾
+        function poseSkater(model, mode, t, dt, freq) {
+            const u = model.userData; if (!u || !u.isSkater) return;
+            const k = 1 - Math.exp(-14 * dt);
+            const R = (o, x, y, z) => { o.rotation.x += (x - o.rotation.x) * k; o.rotation.y += (y - o.rotation.y) * k; o.rotation.z += (z - o.rotation.z) * k; };
+            const ph = t * freq + u.phase, s = Math.sin(ph), c = Math.cos(ph);
+            let hipY = 1.02, rigX = 0;
+
+            if (mode === 'run') {
+                // 溜冰推蹬：一腳向側後方推出，另一腳屈膝滑行，重心左右移動
+                const pL = Math.max(0, s), pR = Math.max(0, -s);
+                hipY = 1.02 - 0.03 * Math.abs(c); rigX = s * 0.07;
+                R(u.hips, 0, s * 0.12, -s * 0.06);
+                R(u.spine, -0.45, -s * 0.18, s * 0.05);
+                R(u.head, 0.32, s * 0.12, 0);
+                R(u.lHip, 0.45 - 0.8 * pL, 0, -(0.06 + 0.4 * pL));
+                R(u.rHip, 0.45 - 0.8 * pR, 0, 0.06 + 0.4 * pR);
+                R(u.lKnee, -0.85 + 0.7 * pL, 0, 0);
+                R(u.rKnee, -0.85 + 0.7 * pR, 0, 0);
+                R(u.lSh, 0.35 - s * 0.9, 0, -(0.18 + 0.35 * pL));
+                R(u.rSh, 0.35 + s * 0.9, 0, 0.18 + 0.35 * pR);
+                R(u.lEl, 0.5 + 0.4 * pR, 0, 0);
+                R(u.rEl, 0.5 + 0.4 * pL, 0, 0);
+            } else if (mode === 'jump') {
+                // 抱膝騰空、雙手張開保持平衡
+                R(u.hips, 0, 0, 0); R(u.spine, -0.2, 0, 0); R(u.head, 0.15, 0, 0);
+                R(u.lHip, 1.1, 0, -0.12); R(u.rHip, 1.1, 0, 0.12);
+                R(u.lKnee, -1.8, 0, 0); R(u.rKnee, -1.8, 0, 0);
+                R(u.lSh, 0.6, 0, -1.25); R(u.rSh, 0.6, 0, 1.25);
+                R(u.lEl, 0.6, 0, 0); R(u.rEl, 0.6, 0, 0);
+            } else if (mode === 'fall') {
+                // 下落時伸腳準備落地
+                R(u.hips, 0, 0, 0); R(u.spine, -0.3, 0, 0); R(u.head, 0.2, 0, 0);
+                R(u.lHip, 0.5, 0, -0.1); R(u.rHip, 0.2, 0, 0.1);
+                R(u.lKnee, -0.7, 0, 0); R(u.rKnee, -0.5, 0, 0);
+                R(u.lSh, 0.4, 0, -0.9); R(u.rSh, 0.4, 0, 0.9);
+                R(u.lEl, 0.4, 0, 0); R(u.rEl, 0.4, 0, 0);
+            } else if (mode === 'slide') {
+                // 低姿態滑行：左腳前伸、右腳深蹲、右手扶地
+                hipY = 0.42;
+                R(u.hips, 0, 0, 0); R(u.spine, -0.75, 0, 0.1); R(u.head, 0.55, 0, 0);
+                R(u.lHip, 1.45, 0, -0.05); R(u.lKnee, -0.15, 0, 0);
+                R(u.rHip, 1.7, 0, 0.15); R(u.rKnee, -2.5, 0, 0);
+                R(u.lSh, 1.1, 0, -0.35); R(u.rSh, 0.2, 0, 0.6);
+                R(u.lEl, 0.3, 0, 0); R(u.rEl, 0.1, 0, 0);
+            } else {
+                // idle：站姿輕微呼吸
+                hipY = 1.04 + Math.sin(t * 2) * 0.01;
+                R(u.hips, 0, 0, 0); R(u.spine, -0.12 + Math.sin(t * 2) * 0.02, 0, 0); R(u.head, 0.05, Math.sin(t * 0.7) * 0.3, 0);
+                R(u.lHip, 0.3, 0, -0.08); R(u.rHip, 0.3, 0, 0.08);
+                R(u.lKnee, -0.6, 0, 0); R(u.rKnee, -0.6, 0, 0);
+                R(u.lSh, 0.15, 0, -0.18); R(u.rSh, 0.15, 0, 0.18);
+                R(u.lEl, 0.35, 0, 0); R(u.rEl, 0.35, 0, 0);
+            }
+            u.hips.position.y += (hipY - u.hips.position.y) * k;
+            u.rig.position.x += (rigX - u.rig.position.x) * k;
+            // 直排輪永遠保持與地面平行
+            u.lAnk.rotation.x = -(u.lHip.rotation.x + u.lKnee.rotation.x); u.lAnk.rotation.z = -u.lHip.rotation.z;
+            u.rAnk.rotation.x = -(u.rHip.rotation.x + u.rKnee.rotation.x); u.rAnk.rotation.z = -u.rHip.rotation.z;
+        }
+
+        function getPlayerMode() {
+            if (!state.isPlaying) return 'idle';
+            if (pState.isSliding) return 'slide';
+            if (pState.isJumping || player.position.y - pState.currentFloorY > 0.1) return pState.yVelocity > 0 ? 'jump' : 'fall';
+            return 'run';
+        }
+
+        // 環境：進入地下道時變暗、霧變濃
+        function updateEnvironment(delta) {
+            const want = zone.lastType === 'tunnel' && zone.entryFrontZ > -40 && !(zone.exitSpawned && zone.exitBackZ > 14) ? 1 : 0;
+            zone.tunnelF += (want - zone.tunnelF) * Math.min(1, 3 * delta);
+            const f = zone.tunnelF;
+            ambientLight.intensity = 0.35 * (1 - 0.4 * f);
+            hemiLight.intensity = 0.55 * (1 - 0.55 * f);
+            dirLight.intensity = 0.9 * (1 - 0.75 * f);
+            scene.background.copy(SKY_COLOR).lerp(TUNNEL_COLOR, f);
+            scene.fog.color.copy(scene.background);
+            scene.fog.near = 40 - 20 * f; scene.fog.far = 160 - 45 * f;
+        }
+
+        // 鏡頭跟隨：四車道較寬 → 左右跟隨；天空步道 → 跟著升高；地下道 → 壓低在天花板下
+        function updateCamera(delta) {
+            if (!isFinite(camera.position.x)) camera.position.set(0, 5, 9);
+            const portrait = isFinite(camera.aspect) ? Math.max(0, 1 - camera.aspect) : 0;
+            const f = zone ? zone.tunnelF : 0;
+            const lv = pState.levelY, rel = player.position.y - lv;
+            const tx = player.position.x * (0.5 + portrait * 0.4);
+            const ty = (5 + portrait * 3) * (1 - f) + 3.2 * f + lv + rel * 0.5;
+            const tz = (9 + portrait * 6) * (1 - f) + 8 * f;
+            const k = Math.min(1, 6 * delta);
+            camera.position.x += (tx - camera.position.x) * k;
+            camera.position.y += (ty - camera.position.y) * Math.min(1, 10 * delta);
+            camera.position.z += (tz - camera.position.z) * k;
+            camera.lookAt(camera.position.x * 0.6, 1 + lv + rel * 0.5 + 0.2 * f, -15);
+        }
+
+        function showFloatingText(text, xPos) {
+            const el = document.createElement('div'); el.className = 'floating-text'; el.innerText = text;
+            el.style.left = (window.innerWidth / 2 + ((xPos - camera.position.x) * 40)) + 'px'; el.style.top = (window.innerHeight / 2 - 80) + 'px';
+            document.getElementById('ui-layer').appendChild(el); setTimeout(() => el.remove(), 1000);
+        }
+        function showCombo(c) {
+            const d = document.getElementById('combo-display'); d.innerText = `COMBO x${c}`;
+            d.classList.add('combo-active'); setTimeout(() => d.classList.remove('combo-active'), 500);
+        }
+        let zoneBannerTimer;
+        function showZoneBanner(text) {
+            const b = document.getElementById('zone-banner'); b.innerText = text; b.classList.add('zone-show');
+            clearTimeout(zoneBannerTimer); zoneBannerTimer = setTimeout(() => b.classList.remove('zone-show'), 1800);
+        }
+        function updateHUD() {
+            document.getElementById('dist-val').innerText = Math.floor(state.distance) + ' m';
+            document.getElementById('score-val').innerText = Math.floor(state.score);
+            document.getElementById('coin-val').innerText = state.coins;
+            document.getElementById('speed-val').innerText = Math.floor(state.speed) + ' km/h';
+        }
+
+        function gameOver() {
+            state.isPlaying = false; playSound('crash');
+            document.getElementById('hud').classList.add('hidden'); document.getElementById('gameover-screen').classList.remove('hidden');
+            document.getElementById('end-dist').innerText = Math.floor(state.distance) + ' m';
+            document.getElementById('end-score').innerText = Math.floor(state.score); document.getElementById('end-coins').innerText = state.coins;
+            if (state.score > state.bestScore) {
+                state.bestScore = Math.floor(state.score); localStorage.setItem('urbanBestScore', state.bestScore);
+                document.getElementById('new-best-text').style.display = 'block';
+            }
+            document.getElementById('end-best').innerText = state.bestScore;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.1); const time = clock.getElapsedTime();
+
+            if (state.isPlaying && !state.isPaused) {
+                poseSkater(playerModel, getPlayerMode(), time, delta, 5 + state.speed * 0.07);
+                obstacles.forEach(obs => { if (obs.mesh.active && obs.mesh.type === 'skater') poseSkater(obs.innerMesh, 'run', time, delta, 6); });
+                if (state.magnetTime > 0) player.magnetRing.rotation.z += 10 * delta;
+
+                updatePhysics(delta);
+                spawnObjects(delta);
+                updateObjects(delta, time);
+                updateLaneSet();
+                checkCollisions();
+
+                const distGain = (state.speed / 20) * 10 * delta;
+                state.distance += distGain; state.score += distGain * 0.5;
+                if (state.distance > 2000) state.speed = 80; else if (state.distance > 1000) state.speed = 70; else if (state.distance > 400) state.speed = 60; else if (state.distance > 100) state.speed = 50;
+
+                if (state.combo > 0) { state.comboTimer -= delta; if (state.comboTimer <= 0) state.combo = 0; }
+
+                let sUI = "", mUI = "", stUI = "";
+                if (state.shieldTime > 0) {
+                    state.shieldTime -= delta;
+                    if (state.shieldTime <= 0) player.shield.visible = false; else sUI = `🛡 Shield ${Math.ceil(state.shieldTime)}s`;
+                }
+                if (state.magnetTime > 0) {
+                    state.magnetTime -= delta;
+                    if (state.magnetTime <= 0) player.magnetRing.visible = false; else mUI = `🧲 Magnet ${Math.ceil(state.magnetTime)}s`;
+                }
+                if (state.starTime > 0) {
+                    state.starTime -= delta;
+                    if (state.starTime <= 0) player.starAura.visible = false; else stUI = `⭐ Star ${Math.ceil(state.starTime)}s`;
+                    const hue = (time * 3) % 1;
+                    player.starAura.material.color.setHSL(hue, 1, 0.5);
+                    player.starAura.rotation.y += 5 * delta; player.starAura.rotation.z += 3 * delta;
+                }
+
+                document.getElementById('shield-ui').innerText = sUI;
+                document.getElementById('magnet-ui').innerText = mUI;
+                document.getElementById('star-ui').innerText = stUI;
+
+                updateHUD();
+            } else if (!state.isPlaying) {
+                poseSkater(playerModel, 'idle', time, delta, 0);
+            }
+            updateEnvironment(delta);
+            updateCamera(delta);
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() { camera.aspect = window.innerWidth / Math.max(1, window.innerHeight); camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+        init();
+    </script>
+</body>
+</html>
