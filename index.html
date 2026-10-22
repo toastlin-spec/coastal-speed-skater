@@ -46,6 +46,20 @@
         .shield-text { color: #00FFFF; }
         .magnet-text { color: #FF3366; }
         .star-text { color: #FFD700; text-shadow: 0 0 5px #FFA500; }
+        .ability-text { color: #FFFFFF; font-size: 1rem; }
+
+        /* 角色選擇 */
+        #start-screen { overflow-y: auto; justify-content: flex-start; padding: 24px 0; box-sizing: border-box; }
+        #start-screen h1 { font-size: 2.4rem; margin: 10px 0 4px; }
+        #start-screen h2 { margin-bottom: 14px; }
+        .char-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; width: calc(100% - 32px); max-width: 760px; }
+        @media (max-width: 640px) { .char-grid { grid-template-columns: repeat(2, 1fr); } #start-screen h1 { font-size: 1.8rem; } }
+        .char-card { background: rgba(255,255,255,0.92); border-radius: 14px; padding: 10px; cursor: pointer; border: 3px solid transparent; text-align: center; transition: transform 0.1s, border-color 0.2s; }
+        .char-card:active { transform: scale(0.97); }
+        .char-card.selected { border-color: #FFD700; box-shadow: 0 0 14px #FFD700; }
+        .swatch { height: 38px; border-radius: 8px; margin-bottom: 6px; border: 1px solid rgba(0,0,0,0.2); }
+        .char-name { font-weight: bold; font-size: 1.25rem; color: #222; }
+        .char-skill { font-size: 0.85rem; color: #444; margin-top: 4px; line-height: 1.35; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
@@ -67,6 +81,7 @@
                 <div id="star-ui" class="star-text"></div>
                 <div id="shield-ui" class="shield-text"></div>
                 <div id="magnet-ui" class="magnet-text"></div>
+                <div id="ability-ui" class="ability-text"></div>
             </div>
 
             <div id="virtual-controls">
@@ -83,7 +98,8 @@
 
         <div id="start-screen" class="screen">
             <h1>URBAN & COASTAL<br>SPEED SKATER</h1>
-            <h2>四車道 + 天空步道 + 地下道</h2>
+            <h2>選擇你的溜冰手</h2>
+            <div id="char-grid" class="char-grid"></div>
             <button id="start-btn" class="btn">Start Game</button>
             <p style="color:white; margin-top:20px; font-size:1rem; text-shadow: 1px 1px 2px #000; text-align:center;">
                 ☁ 天空步道：閃避飛機（跳過）與海鷗（滑過）！<br>🚇 地下道：三車道金幣與道具大放送！<br>收集⭐無敵星星可撞碎障礙物！<br><br>
@@ -101,6 +117,7 @@
                 <p>Best Score: <span id="end-best">0</span></p>
             </div>
             <button id="restart-btn" class="btn">PLAY AGAIN</button>
+            <button id="change-char-btn" class="btn" style="background:#555;">換角色</button>
         </div>
     </div>
 
@@ -113,7 +130,8 @@
             distance: 0, score: 0, coins: 0, speed: 20, baseSpeed: 0.6,
             lane: 1, combo: 0, comboTimer: 0,
             bestScore: localStorage.getItem('urbanBestScore') || 0,
-            shieldTime: 0, magnetTime: 0, starTime: 0
+            shieldTime: 0, magnetTime: 0, starTime: 0,
+            abilityTimer: 0, coinsExact: 0
         };
 
         // 地面 / 天空：四條跑道 (-3.75, -1.25, 1.25, 3.75)；地下道：三條跑道 (-2.5, 0, 2.5)
@@ -256,8 +274,7 @@
 
         function createPlayer() {
             player = new THREE.Group();
-            playerModel = createSkaterModel(SKATER_PALETTES.player);
-            player.add(playerModel);
+            setPlayerModel();
 
             const shieldGeo = new THREE.SphereGeometry(1.2, 16, 16);
             const shieldMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.4, wireframe: true });
@@ -318,6 +335,43 @@
                 { jacket: 0x2E7D32, accent: 0xFF9800, pants: 0x3e2723, helmet: 0xFF9800, stripe: 0x2E7D32, skin: 0x8d5524, glove: 0x1b1b1b, boot: 0xeeeeee, wheel: 0x76ff03, hair: 0x1a1a1a, pack: 0x5D4037 }
             ]
         };
+
+        /* ---------- 可選主角與能力 ---------- */
+        const CHARACTERS = [
+            { id: 'weiwei', name: '維維', swatch: 'linear-gradient(90deg,#ffffff 50%,#1E90FF 50%)', skill: '每 30 秒自動產生 15 秒磁吸效果',
+              palette: { jacket: 0xffffff, accent: 0x1E90FF, pants: 0x1E5AA8, helmet: 0x1E90FF, stripe: 0xffffff, skin: 0xf1c27d, glove: 0x1E5AA8, boot: 0xffffff, wheel: 0x00e5ff, hair: 0x3b2314, pack: 0x1E90FF } },
+            { id: 'weiwei2', name: '威威', swatch: '#E53935', skill: '獲得的金幣量增加 20%',
+              palette: { jacket: 0xE53935, accent: 0x8B0000, pants: 0xB71C1C, helmet: 0xE53935, stripe: 0xffffff, skin: 0xffdbac, glove: 0x8B0000, boot: 0xE53935, wheel: 0xff5252, hair: 0x1a1a1a, pack: 0x8B0000 } },
+            { id: 'jiaxi', name: '嘉喜', swatch: '#9E9E9E', skill: '跳躍滯空時間增加 50%',
+              palette: { jacket: 0x9E9E9E, accent: 0x616161, pants: 0x424242, helmet: 0xBDBDBD, stripe: 0x616161, skin: 0xe0ac69, glove: 0x424242, boot: 0xE0E0E0, wheel: 0xB0BEC5, hair: 0x2b1d14, pack: 0x757575 } },
+            { id: 'shuoshuo', name: '碩碩', swatch: 'linear-gradient(90deg,#FF8C00 50%,#111111 50%)', skill: '能撞開溜冰人與海鷗（汽車、火車、飛機等機械類不行）',
+              palette: { jacket: 0xFF8C00, accent: 0x111111, pants: 0x111111, helmet: 0x111111, stripe: 0xFF8C00, skin: 0xf1c27d, glove: 0x111111, boot: 0x111111, wheel: 0xFF8C00, hair: 0x111111, pack: 0x111111 } }
+        ];
+        const SMASHABLE = ['skater', 'bird']; // 碩碩可撞開的非機械類
+        let selectedChar = CHARACTERS[+localStorage.getItem('skaterChar')] || CHARACTERS[0];
+        const isChar = (id) => selectedChar.id === id;
+
+        function buildCharSelect() {
+            const grid = document.getElementById('char-grid');
+            CHARACTERS.forEach((c, i) => {
+                const card = document.createElement('div');
+                card.className = 'char-card' + (c === selectedChar ? ' selected' : '');
+                card.innerHTML = `<div class="swatch" style="background:${c.swatch}"></div><div class="char-name">${c.name}</div><div class="char-skill">${c.skill}</div>`;
+                card.addEventListener('click', () => {
+                    selectedChar = c; localStorage.setItem('skaterChar', i);
+                    grid.querySelectorAll('.char-card').forEach(el => el.classList.remove('selected'));
+                    card.classList.add('selected');
+                    setPlayerModel();
+                });
+                grid.appendChild(card);
+            });
+        }
+
+        function setPlayerModel() {
+            if (playerModel) player.remove(playerModel);
+            playerModel = createSkaterModel(selectedChar.palette);
+            player.add(playerModel);
+        }
 
         function createSkaterModel(p) {
             const root = new THREE.Group();
@@ -685,6 +739,8 @@
                 else { if (Math.abs(diffY) > 30) (diffY < 0) ? jump() : slide(); }
             }, {passive: false});
 
+            buildCharSelect();
+            document.getElementById('change-char-btn').addEventListener('click', backToMenu);
             document.getElementById('start-btn').addEventListener('click', startGame); document.getElementById('restart-btn').addEventListener('click', resetGame); document.getElementById('pause-btn').addEventListener('click', togglePause);
             document.getElementById('btn-left').addEventListener('touchstart', (e)=>{ e.preventDefault(); movePlayer(-1);}); document.getElementById('btn-right').addEventListener('touchstart', (e)=>{ e.preventDefault(); movePlayer(1);});
             document.getElementById('btn-up').addEventListener('touchstart', (e)=>{ e.preventDefault(); jump();}); document.getElementById('btn-down').addEventListener('touchstart', (e)=>{ e.preventDefault(); slide();});
@@ -709,7 +765,8 @@
 
         function jump() {
             if (!pState.isJumping && !pState.isSliding && player.position.y - pState.currentFloorY < 0.2) {
-                pState.isJumping = true; pState.yVelocity = JUMP_VELOCITY; playSound('jump');
+                // 嘉喜：初速 ÷1.5、重力 ÷2.25 → 跳躍高度相同，滯空時間 ×1.5
+                pState.isJumping = true; pState.yVelocity = isChar('jiaxi') ? JUMP_VELOCITY / 1.5 : JUMP_VELOCITY; playSound('jump');
             }
         }
 
@@ -723,11 +780,17 @@
         /* =========================================================
            五、遊戲邏輯與動態生成
            ========================================================= */
+        function backToMenu() {
+            resetGame(); state.isPlaying = false;
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+        }
+
         function startGame() { initAudio(); document.getElementById('start-screen').classList.add('hidden'); document.getElementById('hud').classList.remove('hidden'); state.isPlaying = true; }
 
         function resetGame() {
             state.distance = 0; state.score = 0; state.coins = 0; state.speed = 20; state.combo = 0;
-            state.shieldTime = 0; state.magnetTime = 0; state.starTime = 0;
+            state.shieldTime = 0; state.magnetTime = 0; state.starTime = 0; state.abilityTimer = 0; state.coinsExact = 0;
             player.position.set(LANES[START_LANE], 0, 0);
             player.shield.visible = false; player.magnetRing.visible = false; player.starAura.visible = false;
             pState.isJumping = false; pState.isSliding = false; pState.yVelocity = 0; pState.currentFloorY = 0; pState.levelY = 0;
@@ -1073,7 +1136,8 @@
                 // 在坡道上：貼著坡面上下
                 player.position.y = floorY; pState.yVelocity = 0;
             } else if (player.position.y > floorY || pState.isJumping) {
-                pState.yVelocity -= GRAVITY * delta;
+                const g = (pState.isJumping && isChar('jiaxi') && pState.yVelocity > -JUMP_VELOCITY + 0.01) ? GRAVITY / 2.25 : GRAVITY;
+                pState.yVelocity -= g * delta;
                 player.position.y += pState.yVelocity * delta;
 
                 if (player.position.y <= floorY) {
@@ -1115,6 +1179,13 @@
                 if (obs.mesh.active && hurtBox.intersectsBox(obs.box)) {
                     if (obs.mesh.type.includes('train') && player.position.y >= 1.5) continue; // 高空豁免權
 
+                    // 碩碩：撞開溜冰人與海鷗 (機械類照樣會撞倒)
+                    if (isChar('shuoshuo') && SMASHABLE.includes(obs.mesh.type)) {
+                        obs.mesh.active = false; obs.mesh.visible = false;
+                        playSound('crash'); showFloatingText('撞開！', player.position.x); state.score += 30;
+                        continue;
+                    }
+
                     if (state.shieldTime > 0 || state.starTime > 0) {
                         obs.mesh.active = false; obs.mesh.visible = false;
                         playSound('crash'); showFloatingText("SMASH!", player.position.x);
@@ -1130,8 +1201,12 @@
                 const dist = coin.mesh.position.distanceTo(player.position);
                 if (coin.mesh.active && (collectBox.intersectsBox(coin.box) || (state.magnetTime > 0 && dist < 2.0))) {
                     coin.mesh.active = false; coin.mesh.visible = false;
-                    playSound('coin'); state.coins++; state.combo++; state.comboTimer = 2.0;
+                    // 威威：金幣 +20% (以小數累積，每 5 枚多得 1 枚)
+                    const coinMul = isChar('weiwei2') ? 1.2 : 1;
+                    state.coinsExact += coinMul; state.coins = Math.floor(state.coinsExact + 1e-6);
+                    playSound('coin'); state.combo++; state.comboTimer = 2.0;
                     let pts = 10; if (state.combo > 3) { pts = 10 * Math.min(Math.floor(state.combo/3), 5); showCombo(state.combo); }
+                    pts = Math.round(pts * coinMul);
                     state.score += pts; showFloatingText(`+${pts}`, player.position.x); updateHUD();
                 }
             }
@@ -1305,6 +1380,19 @@
                 if (state.distance > 2000) state.speed = 80; else if (state.distance > 1000) state.speed = 70; else if (state.distance > 400) state.speed = 60; else if (state.distance > 100) state.speed = 50;
 
                 if (state.combo > 0) { state.comboTimer -= delta; if (state.comboTimer <= 0) state.combo = 0; }
+
+                // 維維：每 30 秒自動產生 15 秒磁吸
+                let aUI = '';
+                if (isChar('weiwei')) {
+                    state.abilityTimer += delta;
+                    if (state.abilityTimer >= 30) {
+                        state.abilityTimer -= 30;
+                        state.magnetTime = Math.max(state.magnetTime, 15); player.magnetRing.visible = true;
+                        playSound('powerup'); showFloatingText('維維磁吸！', player.position.x);
+                    }
+                    aUI = `維維磁吸 ${Math.ceil(30 - state.abilityTimer)}s 後`;
+                }
+                document.getElementById('ability-ui').innerText = aUI;
 
                 let sUI = "", mUI = "", stUI = "";
                 if (state.shieldTime > 0) {
