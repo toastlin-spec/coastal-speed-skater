@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Coastal Speed Skater - Sky & Tunnel</title>
+    <title>Coastal Speed Skater - AI Race</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -60,6 +60,21 @@
         .swatch { height: 38px; border-radius: 8px; margin-bottom: 6px; border: 1px solid rgba(0,0,0,0.2); }
         .char-name { font-weight: bold; font-size: 1.25rem; color: #222; }
         .char-skill { font-size: 0.85rem; color: #444; margin-top: 4px; line-height: 1.35; }
+
+        /* AI 對戰 */
+        .hud-text small { font-size: 0.8rem; opacity: 0.85; }
+        .rival-label { color: #FFB3B3; }
+        #race-track { position: relative; margin: 0 20px; height: 8px; background: rgba(0,0,0,0.35); border-radius: 4px; }
+        #race-bar { height: 100%; width: 0; background: linear-gradient(90deg, #00E5FF, #FFD700); border-radius: 4px; }
+        #race-track span { position: absolute; right: -6px; top: -9px; font-size: 1rem; }
+        @media (max-width: 640px) { .hud-top { padding: 10px 10px; } .hud-text { font-size: 0.85rem; } .hud-value { font-size: 1.3rem; } }
+        .diff-row { color: #fff; font-weight: bold; margin-top: 14px; text-shadow: 1px 1px 2px #000; }
+        .diff-btn { pointer-events: auto; margin: 0 3px; padding: 6px 14px; border-radius: 16px; border: 2px solid #fff; background: rgba(0,0,0,0.35); color: #fff; font-weight: bold; font-size: 0.95rem; cursor: pointer; }
+        .diff-btn.selected { background: #FFD700; color: #222; }
+        .result-table { margin: 0 auto 6px; border-collapse: collapse; font-weight: bold; color: #333; }
+        .result-table th, .result-table td { padding: 5px 14px; font-size: 1.1rem; }
+        .result-table th { color: #1E90FF; }
+        .result-table td.big { color: #FF4500; font-size: 1.5rem; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
@@ -67,10 +82,12 @@
     <div id="ui-layer">
         <div id="hud" class="hidden">
             <div class="hud-top">
-                <div class="hud-text">DISTANCE<span id="dist-val" class="hud-value">0 m</span></div>
-                <div class="hud-text">SCORE<span id="score-val" class="hud-value">0</span></div>
+                <div class="hud-text">DISTANCE<span id="dist-val" class="hud-value">0 m</span><small>/ 3000 m</small></div>
+                <div class="hud-text">你 · <span id="p-name"></span><span id="score-val" class="hud-value">0</span></div>
+                <div class="hud-text rival-label">AI · <span id="ai-name"></span><span id="ai-score-val" class="hud-value">0</span></div>
                 <div class="hud-text">SPEED<span id="speed-val" class="hud-value">20 km/h</span></div>
             </div>
+            <div id="race-track"><div id="race-bar"></div><span>🏁</span></div>
             <div class="hud-top" style="padding-top: 0;">
                 <div class="hud-text" style="align-items: flex-start;">🪙 <span id="coin-val">0</span></div>
                 <button id="pause-btn" class="btn" style="padding: 5px 15px; font-size: 1rem; margin:0; background:rgba(0,0,0,0.5);">❚❚</button>
@@ -100,20 +117,32 @@
             <h1>URBAN & COASTAL<br>SPEED SKATER</h1>
             <h2>選擇你的溜冰手</h2>
             <div id="char-grid" class="char-grid"></div>
-            <button id="start-btn" class="btn">Start Game</button>
+            <div class="diff-row">AI 對手難度：
+                <button class="diff-btn" data-d="easy">簡單</button>
+                <button class="diff-btn" data-d="normal">普通</button>
+                <button class="diff-btn" data-d="hard">困難</button>
+            </div>
+            <button id="start-btn" class="btn">開始比賽</button>
             <p style="color:white; margin-top:20px; font-size:1rem; text-shadow: 1px 1px 2px #000; text-align:center;">
-                ☁ 天空步道：閃避飛機（跳過）與海鷗（滑過）！<br>🚇 地下道：三車道金幣與道具大放送！<br>收集⭐無敵星星可撞碎障礙物！<br><br>
+                🏁 和 AI 對手比賽 3000 m！撞到障礙就出局，比誰的分數高！<br>金幣、道具雙方共用，先拿先贏；完賽 +300 分<br>
+                ☁ 天空步道：閃避飛機（跳過）與海鷗（滑過）！<br>🚇 地下道：三車道金幣與道具大放送！<br><br>
                 手機: 左右上下滑動 (Swipe)<br>電腦: 方向鍵 / 空白鍵跳躍
             </p>
         </div>
 
         <div id="gameover-screen" class="screen hidden">
-            <h1 style="color: #FF4500;">GAME OVER</h1>
+            <h1 id="result-title" style="color: #FF4500;">GAME OVER</h1>
+            <p id="result-reason" style="color:#fff; font-weight:bold; margin-top:0; text-shadow:1px 1px 2px #000;"></p>
             <div class="stats-box">
                 <p id="new-best-text" style="color:#FF4500; display:none; animation: pulse 1s infinite;">★ NEW BEST SCORE ★</p>
+                <table class="result-table">
+                    <tr><th></th><th>你</th><th>AI 對手</th></tr>
+                    <tr><td>角色</td><td id="r-p-name"></td><td id="r-ai-name"></td></tr>
+                    <tr><td>分數</td><td id="end-score" class="big">0</td><td id="r-ai-score" class="big">0</td></tr>
+                    <tr><td>金幣</td><td id="end-coins">0</td><td id="r-ai-coins">0</td></tr>
+                    <tr><td>狀態</td><td id="r-p-status"></td><td id="r-ai-status"></td></tr>
+                </table>
                 <p>Distance: <span id="end-dist">0 m</span></p>
-                <p>Score: <span id="end-score">0</span></p>
-                <p>Coins: <span id="end-coins">0</span></p>
                 <p>Best Score: <span id="end-best">0</span></p>
             </div>
             <button id="restart-btn" class="btn">PLAY AGAIN</button>
@@ -125,23 +154,31 @@
         /* =========================================================
            一、遊戲狀態與全域變數
            ========================================================= */
+        // 跑者個別的分數、金幣、道具等狀態在 makeRunner()；這裡只放整場比賽共用的狀態
         const state = {
             isPlaying: false, isPaused: false,
-            distance: 0, score: 0, coins: 0, speed: 20, baseSpeed: 0.6,
-            lane: 1, combo: 0, comboTimer: 0,
-            bestScore: localStorage.getItem('urbanBestScore') || 0,
-            shieldTime: 0, magnetTime: 0, starTime: 0,
-            abilityTimer: 0, coinsExact: 0
+            distance: 0, speed: 20, baseSpeed: 0.6, finishPlaced: false,
+            bestScore: +localStorage.getItem('urbanBestScore') || 0,
+            difficulty: localStorage.getItem('aiDifficulty') || 'normal'
         };
 
-        // 地面 / 天空：四條跑道 (-3.75, -1.25, 1.25, 3.75)；地下道：三條跑道 (-2.5, 0, 2.5)
+        // 地面 / 天空：五條跑道 (-5, -2.5, 0, 2.5, 5)；地下道：三條跑道 (-2.5, 0, 2.5)
         const LANE_WIDTH = 2.5;
-        const LANE_COUNT = 4;
+        const LANE_COUNT = 5;
         const LANES = Array.from({ length: LANE_COUNT }, (_, i) => (i - (LANE_COUNT - 1) / 2) * LANE_WIDTH);
         const LANE_IDS = LANES.map((_, i) => i);
         const TUNNEL_LANES = [-LANE_WIDTH, 0, LANE_WIDTH];
         const ROAD_HALF = (LANE_WIDTH * LANE_COUNT + 2) / 2;
-        const START_LANE = 1;
+        const PLAYER_LANE = 1, AI_LANE = 3;
+        const AI_Z = -2.5;           // AI 對手在玩家前方一點點，避免同跑道時重疊
+        const RACE_DIST = 3000;      // 比賽距離 (m)
+        const FINISH_BONUS = 300;    // 完賽獎勵分數
+        const UNITS_PER_M = 3.6;     // 每 1 m 距離 = 地景移動 3.6 單位
+        const DIFFICULTY = {
+            easy:   { miss: 0.18, think: 0.5, greed: 0.6 },   // miss：每個障礙失誤機率；think：換道反應間隔 (秒)；greed：追金幣的積極度
+            normal: { miss: 0.08, think: 0.32, greed: 1.5 },
+            hard:   { miss: 0.02, think: 0.18, greed: 2.5 }
+        };
         const JUMP_VELOCITY = 12;
         const GRAVITY = 32;
 
@@ -158,14 +195,11 @@
         const SKY_COLOR = new THREE.Color(0x7EC0EE), TUNNEL_COLOR = new THREE.Color(0x14141c);
 
         let scene, camera, renderer, ambientLight, hemiLight, dirLight;
-        let player, playerModel;
+        let player, P, AI, runners = [];   // player = 玩家的 3D 群組 (鏡頭跟隨用)
         let ground, sceneryObjs = [];
         let obstacles = [], coins = [], powerups = [], structures = [];
-        let activeLanes = LANES;
         const clock = new THREE.Clock();
         const hurtBox = new THREE.Box3(), collectBox = new THREE.Box3();
-
-        const pState = { yVelocity: 0, isJumping: false, isSliding: false, slideTimer: 0, targetX: LANES[START_LANE], currentFloorY: 0, levelY: 0 };
         let zone;
 
         /* =========================================================
@@ -231,7 +265,7 @@
             scene.add(dirLight);
 
             createWorld();
-            createPlayer();
+            createRunners();
             initObjectPools();
             resetZone();
             setupInputs();
@@ -247,7 +281,7 @@
             ground.rotation.x = -Math.PI / 2; ground.position.z = -100;
             ground.receiveShadow = true; scene.add(ground);
 
-            // 跑道分隔線：4 條跑道 → 3 條線
+            // 跑道分隔線：5 條跑道 → 4 條線
             const lineGeo = new THREE.PlaneGeometry(0.1, 400);
             const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
             for (let i = 1; i < LANE_COUNT; i++) {
@@ -270,32 +304,6 @@
             const grassMat = new THREE.MeshStandardMaterial({ color: 0x4CAF50 });
             const leftGrass = new THREE.Mesh(grassGeo, grassMat); leftGrass.rotation.x = -Math.PI / 2; leftGrass.position.set(-ROAD_HALF - 50, -0.1, -100); leftGrass.receiveShadow = true; scene.add(leftGrass);
             const rightGrass = new THREE.Mesh(grassGeo, grassMat); rightGrass.rotation.x = -Math.PI / 2; rightGrass.position.set(ROAD_HALF + 50, -0.1, -100); rightGrass.receiveShadow = true; scene.add(rightGrass);
-        }
-
-        function createPlayer() {
-            player = new THREE.Group();
-            setPlayerModel();
-
-            const shieldGeo = new THREE.SphereGeometry(1.2, 16, 16);
-            const shieldMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.4, wireframe: true });
-            player.shield = new THREE.Mesh(shieldGeo, shieldMat);
-            player.shield.position.y = 1; player.shield.visible = false;
-            player.add(player.shield);
-
-            const magGeo = new THREE.TorusGeometry(1.5, 0.1, 8, 24);
-            const magMat = new THREE.MeshBasicMaterial({ color: 0xFF3366, transparent: true, opacity: 0.6 });
-            player.magnetRing = new THREE.Mesh(magGeo, magMat);
-            player.magnetRing.rotation.x = Math.PI/2; player.magnetRing.position.y = 0.5; player.magnetRing.visible = false;
-            player.add(player.magnetRing);
-
-            const starAuraGeo = new THREE.IcosahedronGeometry(1.4, 0);
-            const starAuraMat = new THREE.MeshBasicMaterial({ color: 0xFFD700, wireframe: true, transparent: true, opacity: 0.8 });
-            player.starAura = new THREE.Mesh(starAuraGeo, starAuraMat);
-            player.starAura.position.y = 1; player.starAura.visible = false;
-            player.add(player.starAura);
-
-            player.position.set(LANES[START_LANE], 0, 0);
-            scene.add(player);
         }
 
         /* ---------- 共用：材質 / 幾何快取與組裝小工具 ---------- */
@@ -349,7 +357,6 @@
         ];
         const SMASHABLE = ['skater', 'bird']; // 碩碩可撞開的非機械類
         let selectedChar = CHARACTERS[+localStorage.getItem('skaterChar')] || CHARACTERS[0];
-        const isChar = (id) => selectedChar.id === id;
 
         function buildCharSelect() {
             const grid = document.getElementById('char-grid');
@@ -368,9 +375,8 @@
         }
 
         function setPlayerModel() {
-            if (playerModel) player.remove(playerModel);
-            playerModel = createSkaterModel(selectedChar.palette);
-            player.add(playerModel);
+            setRunnerChar(P, selectedChar);
+            if (AI.char === selectedChar) setRunnerChar(AI, pickAIChar()); // 對手不能和玩家同一位
         }
 
         function createSkaterModel(p) {
@@ -666,9 +672,28 @@
             return g;
         }
 
+        // 終點拱門 + 地上的棋盤格終點線 (橫幅放高，鏡頭不會穿過)
+        function buildFinish() {
+            const g = new THREE.Group(); const W = ROAD_HALF * 2;
+            for (const s of [-1, 1]) {
+                add(g, box(0.5, 10.5, 0.5), M(0xffffff), s * (ROAD_HALF + 0.6), 5.25, 0);
+                add(g, box(0.7, 0.4, 0.7), M(0xe53935), s * (ROAD_HALF + 0.6), 0.2, 0);
+            }
+            const banner = makeSign('🏁 FINISH 終點', W + 1.7, 1.8, '#111111', '#ffffff');
+            banner.position.set(0, 9.8, 0.3); g.add(banner);
+            const c = document.createElement('canvas'); c.width = 256; c.height = 32;
+            const cg = c.getContext('2d');
+            for (let i = 0; i < 32; i++) for (let j = 0; j < 4; j++) { cg.fillStyle = (i + j) % 2 ? '#111' : '#fff'; cg.fillRect(i * 8, j * 8, 8, 8); }
+            const line = new THREE.Mesh(new THREE.PlaneGeometry(W, 1.2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }));
+            line.rotation.x = -Math.PI / 2; line.position.set(0, 0.04, 0); g.add(line);
+            g.userData.len = 1;
+            return g;
+        }
+
         const STRUCT_BUILDERS = {
             deck: buildDeck, rampUp: () => buildRamp(true), rampDown: () => buildRamp(false),
-            tunnel: buildTunnel, portalIn: () => buildPortal(true), portalOut: () => buildPortal(false)
+            tunnel: buildTunnel, portalIn: () => buildPortal(true), portalOut: () => buildPortal(false),
+            finish: buildFinish
         };
         function placeStructure(kind, z) {
             let s = structures.find(o => !o.active && o.userData.kind === kind);
@@ -678,21 +703,21 @@
         }
 
         function initObjectPools() {
-            for(let i=0; i<8; i++) {
+            for(let i=0; i<10; i++) {
                 const m = createSkaterModel(SKATER_PALETTES.rivals[i % SKATER_PALETTES.rivals.length]);
                 m.rotation.y = Math.PI; // 對手迎面滑來
                 setupPoolObj(obstacles, m, 'skater');
             }
-            for(let i=0; i<8; i++) { let m = createCarModel(); setupPoolObj(obstacles, m, 'car'); }
+            for(let i=0; i<10; i++) { let m = createCarModel(); setupPoolObj(obstacles, m, 'car'); }
 
             for(let i=0; i<4; i++) { let m = createTrainModel(3); setupPoolObj(obstacles, m, 'train_short'); }
             for(let i=0; i<3; i++) { let m = createTrainModel(10); setupPoolObj(obstacles, m, 'train_long'); }
             for(let i=0; i<2; i++) { let m = createTrainModel(25); setupPoolObj(obstacles, m, 'train_mega'); }
-            for(let i=0; i<10; i++) setupPoolObj(obstacles, createBirdModel(), 'bird');
-            for(let i=0; i<6; i++) setupPoolObj(obstacles, createPlaneModel(), 'plane');
+            for(let i=0; i<14; i++) setupPoolObj(obstacles, createBirdModel(), 'bird');
+            for(let i=0; i<10; i++) setupPoolObj(obstacles, createPlaneModel(), 'plane');
 
             const coinGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16); const coinMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, emissive: 0x554400 });
-            for(let i=0; i<150; i++) { let mesh = new THREE.Mesh(coinGeo, coinMat); mesh.rotation.x = Math.PI/2; mesh.castShadow=true; setupPoolObj(coins, mesh, 'coin'); }
+            for(let i=0; i<180; i++) { let mesh = new THREE.Mesh(coinGeo, coinMat); mesh.rotation.x = Math.PI/2; mesh.castShadow=true; setupPoolObj(coins, mesh, 'coin'); }
 
             const puGeo = new THREE.OctahedronGeometry(0.4);
             for(let i=0; i<4; i++) { let mesh = new THREE.Mesh(puGeo, new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x005555 })); mesh.castShadow=true; setupPoolObj(powerups, mesh, 'shield'); }
@@ -718,8 +743,78 @@
         }
 
         /* =========================================================
-           四、輸入與控制
+           四、跑者 (玩家 / AI 對手) 與輸入控制
            ========================================================= */
+        // 每位跑者有自己的位置、跳躍、道具、分數與角色能力；障礙物、金幣、道具則是雙方共用 (先吃先贏)
+        function createRunnerGroup() {
+            const g = new THREE.Group();
+            g.shield = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.4, wireframe: true }));
+            g.shield.position.y = 1; g.shield.visible = false; g.add(g.shield);
+            g.magnetRing = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.1, 8, 24), new THREE.MeshBasicMaterial({ color: 0xFF3366, transparent: true, opacity: 0.6 }));
+            g.magnetRing.rotation.x = Math.PI / 2; g.magnetRing.position.y = 0.5; g.magnetRing.visible = false; g.add(g.magnetRing);
+            g.starAura = new THREE.Mesh(new THREE.IcosahedronGeometry(1.4, 0), new THREE.MeshBasicMaterial({ color: 0xFFD700, wireframe: true, transparent: true, opacity: 0.8 }));
+            g.starAura.position.y = 1; g.starAura.visible = false; g.add(g.starAura);
+            scene.add(g);
+            return g;
+        }
+
+        function makeRunner(isAI, z) {
+            return {
+                isAI, z, group: createRunnerGroup(), model: null, tag: null, char: CHARACTERS[0],
+                lanes: LANES, lane: 0, targetX: 0, yVel: 0, isJumping: false, isSliding: false, slideTimer: 0,
+                floorY: 0, levelY: 0, alive: true, score: 0, coins: 0, coinsExact: 0, combo: 0, comboTimer: 0,
+                shieldTime: 0, magnetTime: 0, starTime: 0, abilityTimer: 0,
+                ai: { thinkTimer: 0, rolls: new Map() }
+            };
+        }
+
+        function setRunnerChar(r, c) {
+            r.char = c;
+            if (r.model) r.group.remove(r.model);
+            r.model = createSkaterModel(c.palette);
+            r.group.add(r.model);
+            if (r.isAI) setNameTag(r, `AI ${c.name}`);
+        }
+
+        // AI 頭上的名牌
+        function setNameTag(r, text) {
+            if (r.tag) r.group.remove(r.tag);
+            const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+            const g = c.getContext('2d');
+            g.fillStyle = 'rgba(200,30,30,0.85)'; g.beginPath(); g.moveTo(16, 4); g.arcTo(252, 4, 252, 60, 14); g.arcTo(252, 60, 4, 60, 14); g.arcTo(4, 60, 4, 4, 14); g.arcTo(4, 4, 252, 4, 14); g.fill();
+            g.fillStyle = '#fff'; g.font = 'bold 34px "Segoe UI", "Microsoft JhengHei", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+            g.fillText(text, 128, 34);
+            r.tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false }));
+            r.tag.scale.set(1.6, 0.4, 1); r.tag.position.y = 2.15; r.tag.renderOrder = 10;
+            r.group.add(r.tag);
+        }
+
+        function resetRunner(r, lane) {
+            Object.assign(r, {
+                lanes: LANES, lane, targetX: LANES[lane], yVel: 0, isJumping: false, isSliding: false, slideTimer: 0,
+                floorY: 0, levelY: 0, alive: true, score: 0, coins: 0, coinsExact: 0, combo: 0, comboTimer: 0,
+                shieldTime: 0, magnetTime: 0, starTime: 0, abilityTimer: 0
+            });
+            r.ai.thinkTimer = 0; r.ai.rolls.clear();
+            r.group.position.set(LANES[lane], 0, r.z); r.group.rotation.set(0, 0, 0); r.group.visible = true;
+            r.group.shield.visible = false; r.group.magnetRing.visible = false; r.group.starAura.visible = false;
+        }
+
+        function pickAIChar() {
+            const others = CHARACTERS.filter(c => c !== selectedChar);
+            return others[Math.floor(Math.random() * others.length)];
+        }
+
+        function createRunners() {
+            P = makeRunner(false, 0);
+            AI = makeRunner(true, AI_Z);
+            runners = [P, AI];
+            player = P.group;
+            setRunnerChar(P, selectedChar);
+            setRunnerChar(AI, pickAIChar());
+            resetRunner(P, PLAYER_LANE); resetRunner(AI, AI_LANE);
+        }
+
         let touchStartX = 0; let touchStartY = 0;
         function setupInputs() {
             window.addEventListener('keydown', (e) => {
@@ -740,45 +835,61 @@
             }, {passive: false});
 
             buildCharSelect();
+            buildDifficultySelect();
             document.getElementById('change-char-btn').addEventListener('click', backToMenu);
             document.getElementById('start-btn').addEventListener('click', startGame); document.getElementById('restart-btn').addEventListener('click', resetGame); document.getElementById('pause-btn').addEventListener('click', togglePause);
             document.getElementById('btn-left').addEventListener('touchstart', (e)=>{ e.preventDefault(); movePlayer(-1);}); document.getElementById('btn-right').addEventListener('touchstart', (e)=>{ e.preventDefault(); movePlayer(1);});
             document.getElementById('btn-up').addEventListener('touchstart', (e)=>{ e.preventDefault(); jump();}); document.getElementById('btn-down').addEventListener('touchstart', (e)=>{ e.preventDefault(); slide();});
         }
 
-        function movePlayer(dir) {
-            if (dir === -1 && state.lane > 0) state.lane--;
-            if (dir === 1 && state.lane < activeLanes.length - 1) state.lane++;
-            pState.targetX = activeLanes[state.lane];
+        function buildDifficultySelect() {
+            document.querySelectorAll('.diff-btn').forEach(btn => {
+                btn.classList.toggle('selected', btn.dataset.d === state.difficulty);
+                btn.addEventListener('click', () => {
+                    state.difficulty = btn.dataset.d; localStorage.setItem('aiDifficulty', state.difficulty);
+                    document.querySelectorAll('.diff-btn').forEach(b => b.classList.toggle('selected', b === btn));
+                });
+            });
         }
 
-        // 切換跑道組 (4 道 ↔ 3 道)，玩家移到最近的跑道 (同距離時選靠中間的)
-        function setLaneSet(lanes) {
-            const x = pState.targetX;
+        function moveRunner(r, dir) {
+            if (dir === -1 && r.lane > 0) r.lane--;
+            if (dir === 1 && r.lane < r.lanes.length - 1) r.lane++;
+            r.targetX = r.lanes[r.lane];
+        }
+
+        // 切換跑道組 (5 道 ↔ 3 道)，跑者移到最近的跑道 (同距離時選靠中間的)
+        function setRunnerLaneSet(r, lanes) {
+            const x = r.targetX;
             let best = 0;
             lanes.forEach((lx, i) => {
                 const d = Math.abs(lx - x), bd = Math.abs(lanes[best] - x);
                 if (d < bd - 0.01 || (Math.abs(d - bd) <= 0.01 && Math.abs(lx) < Math.abs(lanes[best]))) best = i;
             });
-            activeLanes = lanes; state.lane = best; pState.targetX = lanes[best];
+            r.lanes = lanes; r.lane = best; r.targetX = lanes[best];
         }
 
-        function jump() {
-            if (!pState.isJumping && !pState.isSliding && player.position.y - pState.currentFloorY < 0.2) {
+        function runnerJump(r) {
+            if (!r.isJumping && !r.isSliding && r.group.position.y - r.floorY < 0.2) {
                 // 嘉喜：初速 ÷1.5、重力 ÷2.25 → 跳躍高度相同，滯空時間 ×1.5
-                pState.isJumping = true; pState.yVelocity = isChar('jiaxi') ? JUMP_VELOCITY / 1.5 : JUMP_VELOCITY; playSound('jump');
+                r.isJumping = true; r.yVel = r.char.id === 'jiaxi' ? JUMP_VELOCITY / 1.5 : JUMP_VELOCITY;
+                if (!r.isAI) playSound('jump');
             }
         }
 
-        function slide() {
-            if (!pState.isJumping && !pState.isSliding) {
-                pState.isSliding = true; pState.slideTimer = 0.8;
-            } else if (pState.isJumping) pState.yVelocity = -JUMP_VELOCITY;
+        function runnerSlide(r) {
+            if (!r.isJumping && !r.isSliding) {
+                r.isSliding = true; r.slideTimer = 0.8;
+            } else if (r.isJumping) r.yVel = -JUMP_VELOCITY;
         }
+
+        function movePlayer(dir) { if (P.alive) moveRunner(P, dir); }
+        function jump() { if (P.alive) runnerJump(P); }
+        function slide() { if (P.alive) runnerSlide(P); }
         function togglePause() { if (!state.isPlaying && !state.isPaused) return; state.isPaused = !state.isPaused; }
 
         /* =========================================================
-           五、遊戲邏輯與動態生成
+           五、遊戲流程與動態生成
            ========================================================= */
         function backToMenu() {
             resetGame(); state.isPlaying = false;
@@ -786,14 +897,16 @@
             document.getElementById('start-screen').classList.remove('hidden');
         }
 
-        function startGame() { initAudio(); document.getElementById('start-screen').classList.add('hidden'); document.getElementById('hud').classList.remove('hidden'); state.isPlaying = true; }
+        function startGame() {
+            initAudio();
+            document.getElementById('start-screen').classList.add('hidden');
+            resetGame();
+        }
 
         function resetGame() {
-            state.distance = 0; state.score = 0; state.coins = 0; state.speed = 20; state.combo = 0;
-            state.shieldTime = 0; state.magnetTime = 0; state.starTime = 0; state.abilityTimer = 0; state.coinsExact = 0;
-            player.position.set(LANES[START_LANE], 0, 0);
-            player.shield.visible = false; player.magnetRing.visible = false; player.starAura.visible = false;
-            pState.isJumping = false; pState.isSliding = false; pState.yVelocity = 0; pState.currentFloorY = 0; pState.levelY = 0;
+            state.distance = 0; state.speed = 20; state.finishPlaced = false; state.isPaused = false;
+            setRunnerChar(AI, pickAIChar()); // 每場比賽隨機換一位不同的對手
+            resetRunner(P, PLAYER_LANE); resetRunner(AI, AI_LANE);
 
             obstacles.forEach(o => { o.mesh.active = false; o.mesh.visible = false; });
             coins.forEach(c => { c.mesh.active = false; c.mesh.visible = false; });
@@ -801,6 +914,8 @@
             sceneryObjs.forEach(s => { s.mesh.active = false; s.mesh.visible = false; });
             resetZone();
 
+            document.getElementById('p-name').innerText = P.char.name;
+            document.getElementById('ai-name').innerText = AI.char.name;
             document.getElementById('gameover-screen').classList.add('hidden'); document.getElementById('new-best-text').style.display = 'none'; document.getElementById('hud').classList.remove('hidden');
             updateHUD(); state.isPlaying = true;
         }
@@ -819,7 +934,6 @@
                 entryFrontZ: -999, startZ: -999, cursorZ: 0, remaining: 0,
                 exitSpawned: false, endZ: -999, exitBackZ: -999, bannerShown: true, tunnelF: 0
             };
-            activeLanes = LANES; state.lane = START_LANE; pState.targetX = LANES[START_LANE];
         }
 
         // 某個 z 位置屬於哪種區域：'ground' | 'sky' | 'tunnel' | null (過渡中，不生成)
@@ -832,7 +946,8 @@
         }
 
         function updateZoneSpawning() {
-            if (zone.phase === 'ground' && state.distance >= zone.nextAt) zone.phase = 'waiting';
+            // 終點前 330 m 內不再開始天空 / 地下道，確保終點在地面上
+            if (zone.phase === 'ground' && state.distance >= zone.nextAt && state.distance < RACE_DIST - 330) zone.phase = 'waiting';
 
             if (zone.phase === 'waiting') {
                 const busy = obstacles.some(o => o.mesh.active && o.mesh.position.z - (o.innerMesh.userData.totalLength || 0) < SPAWN_Z + 30)
@@ -893,13 +1008,15 @@
         function spawnGroundRow(zPos) {
             const trainLanes = getTrainLanes(zPos);
             const freeLanes = shuffle(LANE_IDS.filter(l => !trainLanes.has(l)));
-            const trainsAllowed = zone.nextAt - state.distance > 80; // 快進入特殊區段時不生成火車
+            const trainsAllowed = zone.nextAt - state.distance > 80 && RACE_DIST - state.distance > 120; // 快進入特殊區段或終點時不生成火車
 
             const r = Math.random();
             if (r < 0.6) {
+                // 五車道較寬，障礙物數量隨距離增加
                 let obsCount = 1;
-                if (state.distance > 1500) obsCount = 1 + Math.floor(Math.random() * 3);
-                else if (state.distance > 800) obsCount = Math.random() > 0.5 ? 2 : 1;
+                if (state.distance > 1500) obsCount = 2 + Math.floor(Math.random() * 3);
+                else if (state.distance > 800) obsCount = 1 + Math.floor(Math.random() * 3);
+                else if (state.distance > 300) obsCount = Math.random() > 0.5 ? 2 : 1;
                 obsCount = Math.min(obsCount, freeLanes.length - 1); // 永遠留至少一條通道
 
                 let trainCount = trainLanes.size;
@@ -926,8 +1043,9 @@
                     }
                 }
             } else if (r < 0.9) {
-                const l = Math.floor(Math.random() * LANE_COUNT);
-                spawnEntitySeq(coins, 'coin', LANES[l], trainLanes.has(l) ? 2.6 : 0.5, zPos, 5); // 火車頂也會有金幣
+                // 兩排金幣，讓兩位選手都有得搶
+                const ls = shuffle([...LANE_IDS]).slice(0, Math.random() < 0.5 ? 1 : 2);
+                ls.forEach(l => spawnEntitySeq(coins, 'coin', LANES[l], trainLanes.has(l) ? 2.6 : 0.5, zPos, 5)); // 火車頂也會有金幣
             } else {
                 spawnPowerup(LANES[Math.floor(Math.random() * LANE_COUNT)], 1.0, zPos, trainLanes);
             }
@@ -943,8 +1061,8 @@
         function spawnSkyRow(zPos) {
             const lanes = shuffle([...LANE_IDS]);
             let n = 1;
-            if (state.distance > 1500) n = 1 + Math.floor(Math.random() * 3);
-            else if (state.distance > 600) n = Math.random() > 0.5 ? 2 : 1;
+            if (state.distance > 1500) n = 2 + Math.floor(Math.random() * 3);
+            else if (state.distance > 600) n = 1 + Math.floor(Math.random() * 2);
             n = Math.min(n, LANE_COUNT - 1);
             for (let i = 0; i < n; i++) {
                 const type = Math.random() < 0.6 ? 'bird' : 'plane';
@@ -970,12 +1088,17 @@
         function spawnObjects(delta) {
             updateZoneSpawning();
 
+            // 終點拱門：剛好在跑到 RACE_DIST 時抵達玩家位置
+            if (!state.finishPlaced && RACE_DIST - state.distance <= -SPAWN_Z / UNITS_PER_M) {
+                placeStructure('finish', SPAWN_Z); state.finishPlaced = true;
+            }
+
             const area = zoneAreaAt(SPAWN_Z);
             if (area && area !== lastArea) spawnTimer = 0; // 新區段一開始就有內容
             lastArea = area;
             spawnTimer -= delta * state.baseSpeed * (state.speed/20);
             if (spawnTimer <= 0) {
-                if (area === 'ground') { spawnTimer = 1.5 + Math.random() * 2; spawnGroundRow(SPAWN_Z); }
+                if (area === 'ground') { spawnTimer = 1.4 + Math.random() * 1.8; spawnGroundRow(SPAWN_Z); }
                 else if (area === 'sky') { spawnTimer = 1.3 + Math.random() * 1.5; spawnSkyRow(SPAWN_Z); }
                 else if (area === 'tunnel') { spawnTimer = 0.55 + Math.random() * 0.4; spawnTunnelRow(SPAWN_Z); }
                 else spawnTimer = 0.2;
@@ -1000,9 +1123,10 @@
             }
         }
 
+        let spawnSerial = 0;
         function spawnEntity(pool, type, x, y, z) {
             const item = pool.find(i => !i.mesh.active && i.mesh.type === type);
-            if (item) { item.mesh.active = true; item.mesh.position.set(x, y, z); item.mesh.userData.baseY = y; item.mesh.visible = true; }
+            if (item) { item.mesh.active = true; item.mesh.position.set(x, y, z); item.mesh.userData.baseY = y; item.mesh.userData.serial = ++spawnSerial; item.mesh.visible = true; }
         }
         function spawnEntitySeq(pool, type, x, y, startZ, count) {
             for(let i=0; i<count; i++) spawnEntity(pool, type, x, y, startZ - (i*3));
@@ -1010,12 +1134,14 @@
 
         const _magnetTarget = new THREE.Vector3();
         function updateObjects(delta, time) {
-            const moveDist = state.baseSpeed * (state.speed / 20) * 60 * delta;
+            const moveDist = worldSpeed() * delta;
 
-            if (state.magnetTime > 0) {
-                _magnetTarget.set(player.position.x, player.position.y + 1, player.position.z);
+            // 磁吸：把附近金幣吸向擁有磁吸的跑者 (雙方各自計算)
+            for (const r of runners) {
+                if (!r.alive || r.magnetTime <= 0) continue;
+                _magnetTarget.set(r.group.position.x, r.group.position.y + 1, r.z);
                 coins.forEach(coin => {
-                    if (coin.mesh.active && coin.mesh.position.z > -40 && coin.mesh.position.z < 5) {
+                    if (coin.mesh.active && coin.mesh.position.z > r.z - 40 && coin.mesh.position.z < r.z + 5) {
                         coin.mesh.position.lerp(_magnetTarget, 10 * delta);
                     }
                 });
@@ -1026,11 +1152,11 @@
                     const t = obs.mesh.type, u = obs.innerMesh.userData;
                     obs.mesh.position.z += moveDist;
                     if (t === 'plane') {
-                        obs.mesh.position.z += 14 * delta;                         // 飛機比地景更快衝過來
+                        obs.mesh.position.z += OBS_EXTRA_SPEED.plane * delta;      // 飛機比地景更快衝過來
                         u.prop.rotation.z += 40 * delta;
                         obs.innerMesh.rotation.z = Math.sin(time * 2 + u.phase) * 0.12;
                     } else if (t === 'bird') {
-                        obs.mesh.position.z += 5 * delta;
+                        obs.mesh.position.z += OBS_EXTRA_SPEED.bird * delta;
                         const flap = Math.sin(time * 14 + u.phase) * 0.45;
                         u.lw.rotation.z = -flap; u.rw.rotation.z = flap;
                         obs.mesh.position.y = obs.mesh.userData.baseY + Math.sin(time * 3 + u.phase) * 0.12;
@@ -1084,9 +1210,9 @@
         }
 
         /* =========================================================
-           六、分離式核心碰撞判定：受傷(小框) 與 收集(大框)
+           六、物理與碰撞 (每位跑者分開計算)
            ========================================================= */
-        // 玩家腳下的「關卡地板」高度：坡道內插 / 天空步道 / 地面
+        // 跑者腳下的「關卡地板」高度：坡道內插 / 天空步道 / 地面
         function getLevel(pz) {
             let y = 0, onRamp = false;
             for (const s of structures) {
@@ -1105,24 +1231,25 @@
             return { y, onRamp };
         }
 
-        function updatePhysics(delta) {
-            player.position.x += (pState.targetX - player.position.x) * 12 * delta;
-            player.rotation.z = (player.position.x - pState.targetX) * 0.15;
-            player.rotation.y = (player.position.x - pState.targetX) * 0.12; // 換道時身體朝向移動方向
+        function updateRunnerPhysics(r, delta) {
+            const g = r.group;
+            g.position.x += (r.targetX - g.position.x) * 12 * delta;
+            g.rotation.z = (g.position.x - r.targetX) * 0.15;
+            g.rotation.y = (g.position.x - r.targetX) * 0.12; // 換道時身體朝向移動方向
 
-            const level = getLevel(player.position.z);
-            pState.levelY = level.y;
+            const level = getLevel(r.z);
+            r.levelY = level.y;
             let floorY = level.y;
             if (level.y === 0) {
                 for (let obs of obstacles) {
                     if (obs.mesh.active && obs.mesh.type.includes('train')) {
-                        if (Math.abs(player.position.x - obs.mesh.position.x) < 1.1) {
+                        if (Math.abs(g.position.x - obs.mesh.position.x) < 1.1) {
                             const trainFront = obs.mesh.position.z + 6;
                             const totalLength = obs.innerMesh.userData.totalLength || 12;
                             const trainBack = obs.mesh.position.z - totalLength;
 
-                            if (player.position.z > trainBack && player.position.z < trainFront) {
-                                if (player.position.y >= 1.8 || (pState.yVelocity <= 0 && player.position.y >= 1.5)) {
+                            if (r.z > trainBack && r.z < trainFront) {
+                                if (g.position.y >= 1.8 || (r.yVel <= 0 && g.position.y >= 1.5)) {
                                     floorY = 2.1;
                                 }
                             }
@@ -1130,43 +1257,53 @@
                     }
                 }
             }
-            pState.currentFloorY = floorY;
+            r.floorY = floorY;
 
-            if (level.onRamp && !pState.isJumping) {
+            if (level.onRamp && !r.isJumping) {
                 // 在坡道上：貼著坡面上下
-                player.position.y = floorY; pState.yVelocity = 0;
-            } else if (player.position.y > floorY || pState.isJumping) {
-                const g = (pState.isJumping && isChar('jiaxi') && pState.yVelocity > -JUMP_VELOCITY + 0.01) ? GRAVITY / 2.25 : GRAVITY;
-                pState.yVelocity -= g * delta;
-                player.position.y += pState.yVelocity * delta;
+                g.position.y = floorY; r.yVel = 0;
+            } else if (g.position.y > floorY || r.isJumping) {
+                const grav = (r.isJumping && r.char.id === 'jiaxi' && r.yVel > -JUMP_VELOCITY + 0.01) ? GRAVITY / 2.25 : GRAVITY;
+                r.yVel -= grav * delta;
+                g.position.y += r.yVel * delta;
 
-                if (player.position.y <= floorY) {
-                    player.position.y = floorY;
-                    pState.isJumping = false;
-                    pState.yVelocity = 0;
+                if (g.position.y <= floorY) {
+                    g.position.y = floorY;
+                    r.isJumping = false;
+                    r.yVel = 0;
                 }
             } else {
-                player.position.y = floorY; pState.yVelocity = 0;
+                g.position.y = floorY; r.yVel = 0;
             }
 
-            if (pState.isSliding) {
-                pState.slideTimer -= delta;
-                if (pState.slideTimer <= 0) pState.isSliding = false;
+            if (r.isSliding) {
+                r.slideTimer -= delta;
+                if (r.slideTimer <= 0) r.isSliding = false;
             }
         }
 
-        // 進出地下道時切換 4 道 / 3 道
-        function updateLaneSet() {
-            const inTunnel = zone.lastType === 'tunnel' && zone.entryFrontZ > -15 && !(zone.exitSpawned && zone.exitBackZ > 1);
-            if (inTunnel && activeLanes !== TUNNEL_LANES) setLaneSet(TUNNEL_LANES);
-            else if (!inTunnel && activeLanes !== LANES) setLaneSet(LANES);
+        // 進出地下道時切換 5 道 / 3 道
+        function updateLaneSets() {
+            const inTunnel = zone.lastType === 'tunnel' && zone.entryFrontZ > -40 && !(zone.exitSpawned && zone.exitBackZ > 1);
+            const want = inTunnel ? TUNNEL_LANES : LANES;
+            runners.forEach(r => { if (r.lanes !== want) setRunnerLaneSet(r, want); });
         }
 
-        function checkCollisions() {
-            const { x: px, y: py, z: pz } = player.position;
+        function runnerOut(r) {
+            r.alive = false; playSound('crash');
+            if (r.isAI) {
+                r.group.visible = false;
+                showZoneBanner(`💥 AI ${r.char.name} 出局！`);
+            } else {
+                endRace('crash');
+            }
+        }
+
+        function checkRunnerCollisions(r) {
+            const px = r.group.position.x, py = r.group.position.y, pz = r.z;
 
             // 1. 受傷判定框：固定尺寸 (不受手腳擺動影響)，滑行時降低高度
-            const hurtTop = pState.isSliding ? 0.75 : 1.5;
+            const hurtTop = r.isSliding ? 0.75 : 1.5;
             hurtBox.min.set(px - 0.28, py + 0.25, pz - 0.25);
             hurtBox.max.set(px + 0.28, py + hurtTop, pz + 0.25);
 
@@ -1177,57 +1314,167 @@
             // 障礙物碰撞
             for (let obs of obstacles) {
                 if (obs.mesh.active && hurtBox.intersectsBox(obs.box)) {
-                    if (obs.mesh.type.includes('train') && player.position.y >= 1.5) continue; // 高空豁免權
+                    if (obs.mesh.type.includes('train') && py >= 1.5) continue; // 高空豁免權
 
                     // 碩碩：撞開溜冰人與海鷗 (機械類照樣會撞倒)
-                    if (isChar('shuoshuo') && SMASHABLE.includes(obs.mesh.type)) {
-                        obs.mesh.active = false; obs.mesh.visible = false;
-                        playSound('crash'); showFloatingText('撞開！', player.position.x); state.score += 30;
+                    if (r.char.id === 'shuoshuo' && SMASHABLE.includes(obs.mesh.type)) {
+                        obs.mesh.active = false; obs.mesh.visible = false; r.score += 30;
+                        if (!r.isAI) { playSound('crash'); showFloatingText('撞開！', px); }
                         continue;
                     }
 
-                    if (state.shieldTime > 0 || state.starTime > 0) {
+                    if (r.shieldTime > 0 || r.starTime > 0) {
                         obs.mesh.active = false; obs.mesh.visible = false;
-                        playSound('crash'); showFloatingText("SMASH!", player.position.x);
-                        if (state.starTime > 0) { state.score += 50; }
+                        if (r.starTime > 0) r.score += 50;
+                        if (!r.isAI) { playSound('crash'); showFloatingText("SMASH!", px); }
                     } else {
-                        gameOver(); return;
+                        runnerOut(r); return;
                     }
                 }
             }
 
-            // 金幣收集 (使用放大的 CollectBox)
+            // 金幣收集 (使用放大的 CollectBox)：先碰到的人拿走
             for (let coin of coins) {
-                const dist = coin.mesh.position.distanceTo(player.position);
-                if (coin.mesh.active && (collectBox.intersectsBox(coin.box) || (state.magnetTime > 0 && dist < 2.0))) {
+                if (!coin.mesh.active) continue;
+                const dx = coin.mesh.position.x - px, dy = coin.mesh.position.y - py, dz = coin.mesh.position.z - pz;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (collectBox.intersectsBox(coin.box) || (r.magnetTime > 0 && dist < 2.0)) {
                     coin.mesh.active = false; coin.mesh.visible = false;
                     // 威威：金幣 +20% (以小數累積，每 5 枚多得 1 枚)
-                    const coinMul = isChar('weiwei2') ? 1.2 : 1;
-                    state.coinsExact += coinMul; state.coins = Math.floor(state.coinsExact + 1e-6);
-                    playSound('coin'); state.combo++; state.comboTimer = 2.0;
-                    let pts = 10; if (state.combo > 3) { pts = 10 * Math.min(Math.floor(state.combo/3), 5); showCombo(state.combo); }
+                    const coinMul = r.char.id === 'weiwei2' ? 1.2 : 1;
+                    r.coinsExact += coinMul; r.coins = Math.floor(r.coinsExact + 1e-6);
+                    r.combo++; r.comboTimer = 2.0;
+                    let pts = 10; if (r.combo > 3) pts = 10 * Math.min(Math.floor(r.combo/3), 5);
                     pts = Math.round(pts * coinMul);
-                    state.score += pts; showFloatingText(`+${pts}`, player.position.x); updateHUD();
+                    r.score += pts;
+                    if (!r.isAI) { playSound('coin'); if (r.combo > 3) showCombo(r.combo); showFloatingText(`+${pts}`, px); }
                 }
             }
 
             // 道具收集 (使用放大的 CollectBox)
             for (let pu of powerups) {
                 if (pu.mesh.active && collectBox.intersectsBox(pu.box)) {
-                    pu.mesh.active = false; pu.mesh.visible = false; playSound('powerup');
+                    pu.mesh.active = false; pu.mesh.visible = false;
+                    if (!r.isAI) playSound('powerup');
                     if (pu.mesh.type === 'shield') {
-                        state.shieldTime = 8.0; player.shield.visible = true;
+                        r.shieldTime = 8.0; r.group.shield.visible = true;
                     } else if (pu.mesh.type === 'magnet') {
-                        state.magnetTime = 10.0; player.magnetRing.visible = true;
+                        r.magnetTime = 10.0; r.group.magnetRing.visible = true;
                     } else if (pu.mesh.type === 'star') {
-                        state.starTime = 10.0; player.starAura.visible = true;
+                        r.starTime = 10.0; r.group.starAura.visible = true;
                     }
                 }
             }
         }
 
+        // 道具計時、連擊、維維的自動磁吸
+        function updateRunnerTimers(r, delta, time) {
+            if (r.combo > 0) { r.comboTimer -= delta; if (r.comboTimer <= 0) r.combo = 0; }
+            if (r.char.id === 'weiwei') {
+                r.abilityTimer += delta;
+                if (r.abilityTimer >= 30) {
+                    r.abilityTimer -= 30;
+                    r.magnetTime = Math.max(r.magnetTime, 15); r.group.magnetRing.visible = true;
+                    if (!r.isAI) { playSound('powerup'); showFloatingText('維維磁吸！', r.group.position.x); }
+                }
+            }
+            if (r.shieldTime > 0) { r.shieldTime -= delta; if (r.shieldTime <= 0) r.group.shield.visible = false; }
+            if (r.magnetTime > 0) {
+                r.magnetTime -= delta; r.group.magnetRing.rotation.z += 10 * delta;
+                if (r.magnetTime <= 0) r.group.magnetRing.visible = false;
+            }
+            if (r.starTime > 0) {
+                r.starTime -= delta;
+                if (r.starTime <= 0) r.group.starAura.visible = false;
+                r.group.starAura.material.color.setHSL((time * 3) % 1, 1, 0.5);
+                r.group.starAura.rotation.y += 5 * delta; r.group.starAura.rotation.z += 3 * delta;
+            }
+        }
+
         /* =========================================================
-           七、動畫渲染與系統迴圈
+           七、AI 對手：看前方障礙決定換道、跳躍、滑行，並追金幣
+           ========================================================= */
+        const OBS_EXTRA_SPEED = { plane: 14, bird: 5 };
+        function worldSpeed() { return state.baseSpeed * (state.speed / 20) * 60; }
+
+        // 某條跑道上、跑者前方最近且「會撞到」的障礙物
+        function threatInLane(r, x, maxGap) {
+            const py = r.group.position.y;
+            let best = null;
+            for (const o of obstacles) {
+                if (!o.mesh.active) continue;
+                const t = o.mesh.type;
+                if (Math.abs(o.mesh.position.x - x) > 1.3) continue;
+                if (o.box.min.z > r.z + 0.3) continue;                 // 已經過去了
+                const gap = (r.z - 0.25) - o.box.max.z;                // 小於 0 表示已經重疊
+                if (gap > maxGap) continue;
+                if (o.box.max.y < py + 0.25 || o.box.min.y > py + 1.5) continue; // 高度不會碰到 (例如在火車頂上)
+                if (r.starTime > 0 || r.shieldTime > 0) continue;
+                if (r.char.id === 'shuoshuo' && SMASHABLE.includes(t)) continue;
+                const kind = t.includes('train') ? 'block' : t === 'bird' ? 'slide' : 'jump';
+                const tti = Math.max(0, gap) / (worldSpeed() + (OBS_EXTRA_SPEED[t] || 0));
+                if (!best || gap < best.gap) best = { o, gap, kind, tti };
+            }
+            return best;
+        }
+
+        // 某條跑道前方的金幣與道具價值
+        function lootInLane(r, x, look) {
+            let v = 0;
+            for (const c of coins) {
+                const p = c.mesh.position;
+                if (c.mesh.active && Math.abs(p.x - x) < 1 && p.z < r.z + 0.5 && p.z > r.z - look && p.y - r.levelY < 2.6) v += 1;
+            }
+            for (const pu of powerups) {
+                const p = pu.mesh.position;
+                if (pu.mesh.active && Math.abs(p.x - x) < 1 && p.z < r.z + 0.5 && p.z > r.z - look) v += 5;
+            }
+            return v;
+        }
+
+        function updateAI(r, delta) {
+            if (!r.alive) return;
+            const D = DIFFICULTY[state.difficulty] || DIFFICULTY.normal;
+            const v = worldSpeed();
+
+            // 1) 換道決策：每隔一段「反應時間」評估各跑道
+            r.ai.thinkTimer -= delta;
+            if (r.ai.thinkTimer <= 0) {
+                r.ai.thinkTimer = D.think * (0.7 + Math.random() * 0.6);
+                const look = v * 1.6;
+                let bestL = r.lane, bestS = -Infinity;
+                for (let L = 0; L < r.lanes.length; L++) {
+                    let s = 0;
+                    const th = threatInLane(r, r.lanes[L], look);
+                    if (th) s -= th.kind === 'block' ? 1000 - th.gap : 40 - th.gap * 0.1;
+                    s += lootInLane(r, r.lanes[L], look) * D.greed;
+                    s -= Math.abs(L - r.lane) * 4;
+                    if (P.alive && Math.abs(r.lanes[L] - P.targetX) < 0.1) s -= 3; // 稍微避開玩家的跑道
+                    const step = Math.sign(L - r.lane);
+                    for (let k = r.lane + step; step !== 0 && k !== L; k += step) {
+                        if (threatInLane(r, r.lanes[k], v * 0.45)) s -= 500;   // 換道途中會撞到
+                    }
+                    if (s > bestS) { bestS = s; bestL = L; }
+                }
+                if (bestL !== r.lane) moveRunner(r, Math.sign(bestL - r.lane));
+            }
+
+            // 2) 目前位置前方的障礙：跳躍或滑行 (每個障礙只擲一次「失誤」骰子)
+            const th = threatInLane(r, r.group.position.x, v * 0.8);
+            if (th) {
+                const key = th.o.mesh.userData.serial;
+                if (!r.ai.rolls.has(key)) r.ai.rolls.set(key, Math.random() < D.miss);
+                if (!r.ai.rolls.get(key)) {
+                    const jumpT = r.char.id === 'jiaxi' ? 0.5 : 0.3;
+                    if ((th.kind === 'jump' || th.kind === 'block') && th.tti < jumpT) runnerJump(r);
+                    else if (th.kind === 'slide' && th.tti < 0.35 && !r.isJumping) runnerSlide(r);
+                }
+            }
+            if (r.ai.rolls.size > 300) r.ai.rolls.clear();
+        }
+
+        /* =========================================================
+           八、動畫渲染與系統迴圈
            ========================================================= */
         // 姿勢系統：每個關節平滑插值到目標角度，所以 滑行 ↔ 跳躍 ↔ 落地 切換自然
         // 角度慣例 (模型正面朝 -z)：肩/髖 rotation.x 正值 = 往前抬；膝 rotation.x 負值 = 彎曲；脊椎負值 = 前傾
@@ -1291,10 +1538,10 @@
             u.rAnk.rotation.x = -(u.rHip.rotation.x + u.rKnee.rotation.x); u.rAnk.rotation.z = -u.rHip.rotation.z;
         }
 
-        function getPlayerMode() {
+        function getRunnerMode(r) {
             if (!state.isPlaying) return 'idle';
-            if (pState.isSliding) return 'slide';
-            if (pState.isJumping || player.position.y - pState.currentFloorY > 0.1) return pState.yVelocity > 0 ? 'jump' : 'fall';
+            if (r.isSliding) return 'slide';
+            if (r.isJumping || r.group.position.y - r.floorY > 0.1) return r.yVel > 0 ? 'jump' : 'fall';
             return 'run';
         }
 
@@ -1311,12 +1558,12 @@
             scene.fog.near = 40 - 20 * f; scene.fog.far = 160 - 45 * f;
         }
 
-        // 鏡頭跟隨：四車道較寬 → 左右跟隨；天空步道 → 跟著升高；地下道 → 壓低在天花板下
+        // 鏡頭跟隨玩家：五車道較寬 → 左右跟隨；天空步道 → 跟著升高；地下道 → 壓低在天花板下
         function updateCamera(delta) {
             if (!isFinite(camera.position.x)) camera.position.set(0, 5, 9);
             const portrait = isFinite(camera.aspect) ? Math.max(0, 1 - camera.aspect) : 0;
             const f = zone ? zone.tunnelF : 0;
-            const lv = pState.levelY, rel = player.position.y - lv;
+            const lv = P.levelY, rel = player.position.y - lv;
             const tx = player.position.x * (0.5 + portrait * 0.4);
             const ty = (5 + portrait * 3) * (1 - f) + 3.2 * f + lv + rel * 0.5;
             const tz = (9 + portrait * 6) * (1 - f) + 8 * f;
@@ -1342,89 +1589,95 @@
             clearTimeout(zoneBannerTimer); zoneBannerTimer = setTimeout(() => b.classList.remove('zone-show'), 1800);
         }
         function updateHUD() {
-            document.getElementById('dist-val').innerText = Math.floor(state.distance) + ' m';
-            document.getElementById('score-val').innerText = Math.floor(state.score);
-            document.getElementById('coin-val').innerText = state.coins;
+            const ps = Math.floor(P.score), as = Math.floor(AI.score);
+            document.getElementById('dist-val').innerText = Math.floor(Math.min(state.distance, RACE_DIST)) + ' m';
+            document.getElementById('score-val').innerText = ps;
+            document.getElementById('ai-score-val').innerText = AI.alive ? as : `${as} 💥`;
+            document.getElementById('score-val').style.color = ps >= as ? '#FFD700' : '#ffffff';
+            document.getElementById('ai-score-val').style.color = as > ps ? '#FFD700' : '#ffffff';
+            document.getElementById('coin-val').innerText = P.coins;
             document.getElementById('speed-val').innerText = Math.floor(state.speed) + ' km/h';
+            document.getElementById('race-bar').style.width = Math.min(100, state.distance / RACE_DIST * 100) + '%';
         }
 
-        function gameOver() {
-            state.isPlaying = false; playSound('crash');
-            document.getElementById('hud').classList.add('hidden'); document.getElementById('gameover-screen').classList.remove('hidden');
-            document.getElementById('end-dist').innerText = Math.floor(state.distance) + ' m';
-            document.getElementById('end-score').innerText = Math.floor(state.score); document.getElementById('end-coins').innerText = state.coins;
-            if (state.score > state.bestScore) {
-                state.bestScore = Math.floor(state.score); localStorage.setItem('urbanBestScore', state.bestScore);
+        // 比賽結束：撞到障礙 (crash) 或抵達終點 (finish)，比較雙方分數
+        function endRace(reason) {
+            if (!state.isPlaying) return;
+            state.isPlaying = false;
+            if (reason === 'finish') runners.forEach(r => { if (r.alive) r.score += FINISH_BONUS; });
+            const ps = Math.floor(P.score), as = Math.floor(AI.score);
+            const title = document.getElementById('result-title');
+            if (ps > as) { title.innerText = '🏆 你贏了！'; title.style.color = '#FFD700'; }
+            else if (ps < as) { title.innerText = '😢 你輸了'; title.style.color = '#FF4500'; }
+            else { title.innerText = '🤝 平手'; title.style.color = '#ffffff'; }
+            document.getElementById('result-reason').innerText = reason === 'finish' ? `抵達終點！完賽者 +${FINISH_BONUS} 分` : '你撞到障礙物，比賽結束';
+
+            const status = (r) => !r.alive ? '出局 💥' : reason === 'finish' ? '完賽 🏁' : '比賽中止';
+            document.getElementById('r-p-name').innerText = P.char.name;
+            document.getElementById('r-ai-name').innerText = AI.char.name;
+            document.getElementById('end-score').innerText = ps;
+            document.getElementById('r-ai-score').innerText = as;
+            document.getElementById('end-coins').innerText = P.coins;
+            document.getElementById('r-ai-coins').innerText = AI.coins;
+            document.getElementById('r-p-status').innerText = reason === 'finish' ? '完賽 🏁' : '出局 💥';
+            document.getElementById('r-ai-status').innerText = status(AI);
+            document.getElementById('end-dist').innerText = Math.floor(Math.min(state.distance, RACE_DIST)) + ' m';
+            if (ps > state.bestScore) {
+                state.bestScore = ps; localStorage.setItem('urbanBestScore', state.bestScore);
                 document.getElementById('new-best-text').style.display = 'block';
             }
             document.getElementById('end-best').innerText = state.bestScore;
+            document.getElementById('hud').classList.add('hidden'); document.getElementById('gameover-screen').classList.remove('hidden');
+        }
+
+        // 單一遊戲步驟 (動畫迴圈每一幀呼叫)
+        function stepGame(delta, time) {
+            const freq = 5 + state.speed * 0.07;
+            runners.forEach(r => { if (r.alive) poseSkater(r.model, getRunnerMode(r), time, delta, freq); });
+            obstacles.forEach(obs => { if (obs.mesh.active && obs.mesh.type === 'skater') poseSkater(obs.innerMesh, 'run', time, delta, 6); });
+
+            updateAI(AI, delta);
+            runners.forEach(r => { if (r.alive) updateRunnerPhysics(r, delta); });
+            spawnObjects(delta);
+            updateObjects(delta, time);
+            updateLaneSets();
+            for (const r of runners) if (r.alive && state.isPlaying) checkRunnerCollisions(r);
+            if (!state.isPlaying) return;
+
+            const distGain = (state.speed / 20) * 10 * delta;
+            state.distance += distGain;
+            runners.forEach(r => { if (r.alive) r.score += distGain * 0.5; });
+            if (state.distance > 2000) state.speed = 80; else if (state.distance > 1000) state.speed = 70; else if (state.distance > 400) state.speed = 60; else if (state.distance > 100) state.speed = 50;
+
+            runners.forEach(r => { if (r.alive) updateRunnerTimers(r, delta, time); });
+
+            document.getElementById('ability-ui').innerText = P.char.id === 'weiwei' ? `維維磁吸 ${Math.ceil(30 - P.abilityTimer)}s 後` : '';
+            document.getElementById('shield-ui').innerText = P.shieldTime > 0 ? `🛡 Shield ${Math.ceil(P.shieldTime)}s` : '';
+            document.getElementById('magnet-ui').innerText = P.magnetTime > 0 ? `🧲 Magnet ${Math.ceil(P.magnetTime)}s` : '';
+            document.getElementById('star-ui').innerText = P.starTime > 0 ? `⭐ Star ${Math.ceil(P.starTime)}s` : '';
+
+            updateHUD();
+            if (state.distance >= RACE_DIST) endRace('finish');
         }
 
         function animate() {
             requestAnimationFrame(animate);
             const delta = Math.min(clock.getDelta(), 0.1); const time = clock.getElapsedTime();
+            // 頁面載入時視窗可能還是 0 寬度 (例如分頁在背景)，尺寸一變就重新設定
+            if (window.innerWidth > 0 && (window.innerWidth !== lastSize.w || window.innerHeight !== lastSize.h)) onWindowResize();
 
             if (state.isPlaying && !state.isPaused) {
-                poseSkater(playerModel, getPlayerMode(), time, delta, 5 + state.speed * 0.07);
-                obstacles.forEach(obs => { if (obs.mesh.active && obs.mesh.type === 'skater') poseSkater(obs.innerMesh, 'run', time, delta, 6); });
-                if (state.magnetTime > 0) player.magnetRing.rotation.z += 10 * delta;
-
-                updatePhysics(delta);
-                spawnObjects(delta);
-                updateObjects(delta, time);
-                updateLaneSet();
-                checkCollisions();
-
-                const distGain = (state.speed / 20) * 10 * delta;
-                state.distance += distGain; state.score += distGain * 0.5;
-                if (state.distance > 2000) state.speed = 80; else if (state.distance > 1000) state.speed = 70; else if (state.distance > 400) state.speed = 60; else if (state.distance > 100) state.speed = 50;
-
-                if (state.combo > 0) { state.comboTimer -= delta; if (state.comboTimer <= 0) state.combo = 0; }
-
-                // 維維：每 30 秒自動產生 15 秒磁吸
-                let aUI = '';
-                if (isChar('weiwei')) {
-                    state.abilityTimer += delta;
-                    if (state.abilityTimer >= 30) {
-                        state.abilityTimer -= 30;
-                        state.magnetTime = Math.max(state.magnetTime, 15); player.magnetRing.visible = true;
-                        playSound('powerup'); showFloatingText('維維磁吸！', player.position.x);
-                    }
-                    aUI = `維維磁吸 ${Math.ceil(30 - state.abilityTimer)}s 後`;
-                }
-                document.getElementById('ability-ui').innerText = aUI;
-
-                let sUI = "", mUI = "", stUI = "";
-                if (state.shieldTime > 0) {
-                    state.shieldTime -= delta;
-                    if (state.shieldTime <= 0) player.shield.visible = false; else sUI = `🛡 Shield ${Math.ceil(state.shieldTime)}s`;
-                }
-                if (state.magnetTime > 0) {
-                    state.magnetTime -= delta;
-                    if (state.magnetTime <= 0) player.magnetRing.visible = false; else mUI = `🧲 Magnet ${Math.ceil(state.magnetTime)}s`;
-                }
-                if (state.starTime > 0) {
-                    state.starTime -= delta;
-                    if (state.starTime <= 0) player.starAura.visible = false; else stUI = `⭐ Star ${Math.ceil(state.starTime)}s`;
-                    const hue = (time * 3) % 1;
-                    player.starAura.material.color.setHSL(hue, 1, 0.5);
-                    player.starAura.rotation.y += 5 * delta; player.starAura.rotation.z += 3 * delta;
-                }
-
-                document.getElementById('shield-ui').innerText = sUI;
-                document.getElementById('magnet-ui').innerText = mUI;
-                document.getElementById('star-ui').innerText = stUI;
-
-                updateHUD();
+                stepGame(delta, time);
             } else if (!state.isPlaying) {
-                poseSkater(playerModel, 'idle', time, delta, 0);
+                runners.forEach(r => { if (r.group.visible) poseSkater(r.model, 'idle', time, delta, 0); });
             }
             updateEnvironment(delta);
             updateCamera(delta);
             renderer.render(scene, camera);
         }
 
-        function onWindowResize() { camera.aspect = window.innerWidth / Math.max(1, window.innerHeight); camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+        const lastSize = { w: -1, h: -1 };
+        function onWindowResize() { lastSize.w = window.innerWidth; lastSize.h = window.innerHeight; camera.aspect = window.innerWidth / Math.max(1, window.innerHeight); camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
         init();
     </script>
 </body>
